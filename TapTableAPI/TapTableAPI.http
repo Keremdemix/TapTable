@@ -1,0 +1,6 @@
+@TapTableAPI_HostAddress = http://localhost:5014
+
+GET {{TapTableAPI_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
