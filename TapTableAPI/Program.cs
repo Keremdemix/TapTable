@@ -3,18 +3,37 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
 using System.Text;
+using TapTable.Api.Configuration;
 using TapTable.Api.Data;
+
+// Bunlar class'ların varsa aç:
+using TapTable.Api.Repositories.Interfaces;
+using TapTable.Api.Repositories.Implementations;
+using TapTable.Api.Services.Interfaces;
+using TapTable.Api.Services.Implementations;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ── Database ──────────────────────────────────────────────────────────────────
+//
+// ── Database ────────────────────────────────────────────────────────────────
+//
 builder.Services.AddDbContext<TapTableDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseSqlServer(
+        builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// ── JWT Authentication ────────────────────────────────────────────────────────
-var jwtKey = builder.Configuration["Jwt:Key"]
-    ?? throw new InvalidOperationException("Jwt:Key is missing in configuration.");
+//
+// ── JWT Settings Bind (Seçenek B) ───────────────────────────────────────────
+//
+builder.Services.Configure<JwtSettings>(
+    builder.Configuration.GetSection("Jwt"));
 
+var jwtSection = builder.Configuration.GetSection("Jwt");
+var jwtSettings = jwtSection.Get<JwtSettings>()
+    ?? throw new InvalidOperationException("Jwt configuration missing.");
+
+//
+// ── JWT Authentication ─────────────────────────────────────────────────────
+//
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -24,21 +43,31 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
-            ValidAudience = builder.Configuration["Jwt:Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
-            ClockSkew = TimeSpan.Zero   // token süresi dakika dakikaya
+
+            ValidIssuer = jwtSettings.Issuer,
+            ValidAudience = jwtSettings.Audience,
+
+            IssuerSigningKey = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes(jwtSettings.SecretKey)
+            ),
+
+            ClockSkew = TimeSpan.Zero
         };
 
-        // SignalR için token query string'den de okunabilsin
+        // SignalR token support
         options.Events = new JwtBearerEvents
         {
             OnMessageReceived = context =>
             {
                 var accessToken = context.Request.Query["access_token"];
                 var path = context.HttpContext.Request.Path;
-                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+
+                if (!string.IsNullOrEmpty(accessToken)
+                    && path.StartsWithSegments("/hubs"))
+                {
                     context.Token = accessToken;
+                }
+
                 return Task.CompletedTask;
             }
         };
@@ -46,60 +75,68 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
-// ── CORS ──────────────────────────────────────────────────────────────────────
+//
+// ── CORS ────────────────────────────────────────────────────────────────────
+//
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFlutter", policy =>
     {
         policy
             .WithOrigins(
-                "http://localhost:3000",   // Flutter web (dev)
+                "http://localhost:3000",
                 "http://localhost:5000"
             )
             .AllowAnyMethod()
             .AllowAnyHeader()
-            .AllowCredentials();           // SignalR için gerekli
+            .AllowCredentials();
     });
 });
 
-// ── Controllers & OpenAPI ─────────────────────────────────────────────────────
+//
+// ── Controllers & OpenAPI ──────────────────────────────────────────────────
+//
 builder.Services.AddControllers();
 builder.Services.AddOpenApi("v1");
 
-// ── SignalR ───────────────────────────────────────────────────────────────────
+//
+// ── SignalR ────────────────────────────────────────────────────────────────
+//
 builder.Services.AddSignalR();
 
-// ── Repositories ──────────────────────────────────────────────────────────────
-// Her repository buraya eklenecek, örnek:
-// builder.Services.AddScoped<IMenuRepository, MenuRepository>();
-// builder.Services.AddScoped<IOrderRepository, OrderRepository>();
-// builder.Services.AddScoped<ITableRepository, TableRepository>();
-// builder.Services.AddScoped<IAuthRepository, AuthRepository>();
+//
+// ── Repositories ───────────────────────────────────────────────────────────
+//
+builder.Services.AddScoped<IAuthRepository, AuthRepository>();
 
-// ── Services ─────────────────────────────────────────────────────────────────
-// builder.Services.AddScoped<IMenuService, MenuService>();
-// builder.Services.AddScoped<IOrderService, OrderService>();
-// builder.Services.AddScoped<ITableService, TableService>();
-// builder.Services.AddScoped<IAuthService, AuthService>();
+//
+// ── Services ───────────────────────────────────────────────────────────────
+//
+builder.Services.AddScoped<IAuthService, AuthService>();
 
-// ─────────────────────────────────────────────────────────────────────────────
+//
+// ── Build ──────────────────────────────────────────────────────────────────
+//
 var app = builder.Build();
 
-// ── Middleware Pipeline ───────────────────────────────────────────────────────
+//
+// ── Middleware Pipeline ────────────────────────────────────────────────────
+//
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();          // /openapi/v1.json
-    app.MapScalarApiReference(); // UI: /scalar/v1  (Scalar, .NET 10 default)
+    app.MapOpenApi();
+    app.MapScalarApiReference();
 }
 
 app.UseHttpsRedirection();
+
 app.UseCors("AllowFlutter");
+
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
 
-// SignalR hub'ları buraya eklenecek:
 // app.MapHub<OrderHub>("/hubs/orders");
 
 app.Run();

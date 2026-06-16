@@ -12,8 +12,12 @@ public class User
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 
+    public string? RefreshToken { get; set; }
+    public DateTime? RefreshTokenExpiry { get; set; }
+
     // Navigation
     public Restaurant Restaurant { get; set; } = null!;
     public Role Role { get; set; } = null!;
     public ICollection<Order> Orders { get; set; } = new List<Order>();
+
 }
