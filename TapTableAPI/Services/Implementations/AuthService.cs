@@ -6,8 +6,10 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using TapTable.Api.Configuration;
 using TapTable.Api.DTOs.Auth;
+using TapTable.Api.DTOs.Request.Auth;
 using TapTable.Api.Repositories.Interfaces;
 using TapTable.Api.Services.Interfaces;
+using TapTableAPI.DTOs.Response.Auth;
 
 namespace TapTable.Api.Services.Implementations;
 
@@ -22,7 +24,7 @@ public class AuthService : IAuthService
         _jwtSettings = jwtSettings.Value;
     }
 
-    public async Task<AuthResponseDto> LoginAsync(LoginRequestDto request)
+    public async Task<AuthResponseDto> LoginAsync(LoginRequest request)
     {
         var user = await _authRepository.GetUserByEmailAsync(request.Email)
             ?? throw new UnauthorizedAccessException("Geçersiz email veya şifre.");

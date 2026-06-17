@@ -7,6 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="BCrypt.Net-Next" Version="4.2.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.9" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.8" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.9" />
@@ -18,16 +19,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Controllers\" />
     <Folder Include="DTOs\Request\Order\" />
     <Folder Include="DTOs\Request\Table\" />
     <Folder Include="DTOs\Request\Payment\" />
     <Folder Include="DTOs\Request\Menu\" />
     <Folder Include="Middleware\" />
-    <Folder Include="Repositories\Interfaces\" />
-    <Folder Include="Repositories\Implementations\" />
-    <Folder Include="Services\Interfaces\" />
-    <Folder Include="Services\Implementations\" />
   </ItemGroup>
 
 </Project>
