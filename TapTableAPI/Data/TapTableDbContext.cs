@@ -126,6 +126,7 @@ public class TapTableDbContext : DbContext
             e.HasKey(x => x.Id);
             e.Property(x => x.Name).HasMaxLength(150).IsRequired();
             e.Property(x => x.Description).HasMaxLength(500);
+            e.Property(x => x.IsActive).HasDefaultValue(true);
             e.Property(x => x.Price).HasColumnType("decimal(18,2)");
             e.Property(x => x.ImageUrl).HasMaxLength(500);
             e.Property(x => x.IsAvailable).HasDefaultValue(true);

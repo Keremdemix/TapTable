@@ -51,4 +51,10 @@ public class TableRepository : ITableRepository
         table.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
     }
+    public async Task<RestaurantTable?> GetByIdAsync(int id)
+    {
+        return await _context.RestaurantTables
+            .Include(t => t.Restaurant)
+            .FirstOrDefaultAsync(t => t.Id == id && t.IsActive);
+    }
 }
