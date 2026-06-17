@@ -1,32 +1,26 @@
-using System.ComponentModel.DataAnnotations;
-
 namespace TapTable.Api.DTOs.Request.Table;
 
-public class CreateTableRequest
+public class CreateTableRequestDto
 {
-    [Required]
-    [Range(1, 9999)]
     public int TableNumber { get; set; }
-
-    [Required]
-    [Range(1, 20)]
     public int Capacity { get; set; }
-
-    public TableLayoutRequest? Layout { get; set; }
 }
 
-public class UpdateTableLayoutRequest
+public class SetQrUrlRequestDto
 {
-    [Required]
-    public List<TableLayoutRequest> Layouts { get; set; } = new();
+    public string Url { get; set; } = null!;
 }
 
-public class TableLayoutRequest
+public class UpdateTableRequestDto
 {
-    public int TableId { get; set; }
-    public int PositionX { get; set; }
-    public int PositionY { get; set; }
-    public int Width { get; set; } = 100;
-    public int Height { get; set; } = 100;
-    public string Shape { get; set; } = "rectangle"; // rectangle | circle
+    public int TableNumber { get; set; }
+    public int Capacity { get; set; }
+    public bool IsActive { get; set; }
+
+    /// <summary>
+    /// Admin URL değiştirmek isterse doldurur.
+    /// null gelirse mevcut URL korunur.
+    /// boş string ("") gelirse URL silinir.
+    /// </summary>
+    public string? QrCodeUrl { get; set; }
 }

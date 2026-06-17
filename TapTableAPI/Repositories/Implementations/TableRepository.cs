@@ -14,69 +14,41 @@ public class TableRepository : ITableRepository
         _context = context;
     }
 
-    public async Task<List<RestaurantTable>> GetTablesAsync(int restaurantId)
+    public async Task<RestaurantTable?> GetByIdAsync(int id, int restaurantId)
     {
         return await _context.RestaurantTables
-            .Include(t => t.Layout)
+            .FirstOrDefaultAsync(t => t.Id == id
+                                   && t.RestaurantId == restaurantId
+                                   && t.IsActive);
+    }
+
+    public async Task<IEnumerable<RestaurantTable>> GetAllAsync(int restaurantId)
+    {
+        return await _context.RestaurantTables
             .Where(t => t.RestaurantId == restaurantId && t.IsActive)
             .OrderBy(t => t.TableNumber)
             .ToListAsync();
     }
 
-    public async Task<RestaurantTable?> GetTableByIdAsync(int id)
-    {
-        return await _context.RestaurantTables
-            .Include(t => t.Layout)
-            .FirstOrDefaultAsync(t => t.Id == id);
-    }
-
-    public async Task<RestaurantTable?> GetTableWithActiveOrderAsync(int tableId)
-    {
-        return await _context.RestaurantTables
-            .Include(t => t.Layout)
-            .Include(t => t.Orders.Where(o =>
-                o.Status != "Delivered" && o.Status != "Cancelled"))
-                .ThenInclude(o => o.Items)
-            .FirstOrDefaultAsync(t => t.Id == tableId);
-    }
-
-    public async Task<bool> TableNumberExistsAsync(int restaurantId, int tableNumber)
-    {
-        return await _context.RestaurantTables
-            .AnyAsync(t => t.RestaurantId == restaurantId && t.TableNumber == tableNumber);
-    }
-
-    public async Task<RestaurantTable> CreateTableAsync(RestaurantTable table)
+    public async Task<RestaurantTable> CreateAsync(RestaurantTable table)
     {
         _context.RestaurantTables.Add(table);
+        await _context.SaveChangesAsync();
         return table;
     }
 
-    public async Task UpdateTableAsync(RestaurantTable table)
+    public async Task<RestaurantTable> UpdateAsync(RestaurantTable table)
     {
+        table.UpdatedAt = DateTime.UtcNow;
         _context.RestaurantTables.Update(table);
+        await _context.SaveChangesAsync();
+        return table;
     }
 
-    public async Task UpsertLayoutAsync(TableLayout layout)
+    public async Task DeleteAsync(RestaurantTable table)
     {
-        var existing = await _context.TableLayouts
-            .FirstOrDefaultAsync(l => l.TableId == layout.TableId);
-
-        if (existing is null)
-            _context.TableLayouts.Add(layout);
-        else
-        {
-            existing.PositionX = layout.PositionX;
-            existing.PositionY = layout.PositionY;
-            existing.Width     = layout.Width;
-            existing.Height    = layout.Height;
-            existing.Shape     = layout.Shape;
-            _context.TableLayouts.Update(existing);
-        }
-    }
-
-    public async Task SaveChangesAsync()
-    {
+        table.IsActive = false;
+        table.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
     }
 }

@@ -113,6 +113,8 @@ builder.Services.AddScoped<IQrSessionRepository, QrSessionRepository>();
 //
 // ── Services ───────────────────────────────────────────────────────────────
 //
+builder.Services.AddScoped<ITableRepository, TableRepository>();
+builder.Services.AddScoped<ITableService, TableService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IQrSessionService, QrSessionService>();
 

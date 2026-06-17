@@ -6,12 +6,22 @@ public class RestaurantTable
     public int RestaurantId { get; set; }
     public int TableNumber { get; set; }
     public int Capacity { get; set; }
-    public string? QrCodeUrl { get; set; }
-    public string Status { get; set; } = "Available"; // Available | Occupied | Reserved
-    public bool IsActive { get; set; }
-
+    public string QrCodeUrl { get; set; } = null!;
+    public TableStatus Status { get; set; } = TableStatus.Available;
+    public bool IsActive { get; set; } = true;
+    public DateTime CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
+    public ICollection<Order> Orders { get; set; } = new List<Order>();
+    public TableLayout? Layout { get; set; }
     // Navigation
     public Restaurant Restaurant { get; set; } = null!;
-    public TableLayout? Layout { get; set; }
-    public ICollection<Order> Orders { get; set; } = new List<Order>();
+    public ICollection<QrSession> QrSessions { get; set; } = new List<QrSession>();
+}
+
+public enum TableStatus
+{
+    Available,
+    Occupied,
+    Reserved,
+    OutOfService
 }
