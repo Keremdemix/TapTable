@@ -108,11 +108,13 @@ builder.Services.AddSignalR();
 // ── Repositories ───────────────────────────────────────────────────────────
 //
 builder.Services.AddScoped<IAuthRepository, AuthRepository>();
+builder.Services.AddScoped<IQrSessionRepository, QrSessionRepository>();
 
 //
 // ── Services ───────────────────────────────────────────────────────────────
 //
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IQrSessionService, QrSessionService>();
 
 //
 // ── Build ──────────────────────────────────────────────────────────────────
