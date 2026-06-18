@@ -70,11 +70,18 @@ public class TapTableDbContext : DbContext
             e.HasKey(x => x.Id);
             e.Property(x => x.Capacity).HasDefaultValue(4);
             e.Property(x => x.QrCodeUrl).HasMaxLength(500);
-            e.Property(x => x.Status).HasMaxLength(50).HasDefaultValue("Available");
+
+            e.Property(x => x.Status)
+             .HasConversion<string>()
+             .HasMaxLength(50)
+             .HasDefaultValue(TableStatus.Available);
+
             e.Property(x => x.IsActive).HasDefaultValue(true);
 
-            // Aynı restoranda iki tane "Masa 5" olamaz
-            e.HasIndex(x => new { x.RestaurantId, x.TableNumber }).IsUnique();
+            // Aynı restoranda iki tane "Masa 5" olamaz — ama sadece aktif masalar arasında
+            e.HasIndex(x => new { x.RestaurantId, x.TableNumber })
+             .IsUnique()
+             .HasFilter("[IsActive] = 1");
 
             e.HasOne(x => x.Restaurant)
              .WithMany(r => r.Tables)
@@ -119,6 +126,7 @@ public class TapTableDbContext : DbContext
             e.HasKey(x => x.Id);
             e.Property(x => x.Name).HasMaxLength(150).IsRequired();
             e.Property(x => x.Description).HasMaxLength(500);
+            e.Property(x => x.IsActive).HasDefaultValue(true);
             e.Property(x => x.Price).HasColumnType("decimal(18,2)");
             e.Property(x => x.ImageUrl).HasMaxLength(500);
             e.Property(x => x.IsAvailable).HasDefaultValue(true);

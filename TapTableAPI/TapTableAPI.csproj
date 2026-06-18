@@ -22,7 +22,6 @@
     <Folder Include="DTOs\Request\Order\" />
     <Folder Include="DTOs\Request\Table\" />
     <Folder Include="DTOs\Request\Payment\" />
-    <Folder Include="DTOs\Request\Menu\" />
     <Folder Include="Middleware\" />
   </ItemGroup>
 

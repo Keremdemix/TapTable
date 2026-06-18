@@ -1,29 +1,25 @@
-namespace TapTableAPI.DTOs.Response.Table;
+namespace TapTable.Api.DTOs.Response.Table;
 
-public class TableResponse
+public class TableResponseDto
 {
     public int Id { get; set; }
+    public int RestaurantId { get; set; }
     public int TableNumber { get; set; }
     public int Capacity { get; set; }
-    public string? QrCodeUrl { get; set; }
-    public string Status { get; set; } = null!;   // Available | Occupied | Reserved
-    public TableLayoutResponse? Layout { get; set; }
-    public ActiveOrderInfo? ActiveOrder { get; set; }
+    public string QrCodeUrl { get; set; } = null!;
+    public string Status { get; set; } = null!;
+    public bool IsActive { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
 }
 
-public class TableLayoutResponse
+/// <summary>
+/// Admin QR yenilediğinde döner — yeni QR URL'i içerir
+/// </summary>
+public class RegenerateQrResponseDto
 {
-    public int PositionX { get; set; }
-    public int PositionY { get; set; }
-    public int Width { get; set; }
-    public int Height { get; set; }
-    public string Shape { get; set; } = null!;
-}
-
-public class ActiveOrderInfo
-{
-    public int OrderId { get; set; }
-    public string OrderStatus { get; set; } = null!;
-    public decimal TotalPrice { get; set; }
-    public int ItemCount { get; set; }
+    public int TableId { get; set; }
+    public int TableNumber { get; set; }
+    public string QrCodeUrl { get; set; } = null!;
+    public string NewSessionKey { get; set; } = null!;
 }

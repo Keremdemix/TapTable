@@ -13,7 +13,7 @@ public class Order
     public string? Note { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
-
+    public ICollection<Order> Orders { get; set; } = new List<Order>();
     // Navigation
     public RestaurantTable Table { get; set; } = null!;
     public User? Waiter { get; set; }

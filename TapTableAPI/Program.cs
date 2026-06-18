@@ -5,12 +5,12 @@ using Scalar.AspNetCore;
 using System.Text;
 using TapTable.Api.Configuration;
 using TapTable.Api.Data;
-
+using TapTable.Api.Repositories.Implementations;
 // Bunlar class'ların varsa aç:
 using TapTable.Api.Repositories.Interfaces;
-using TapTable.Api.Repositories.Implementations;
-using TapTable.Api.Services.Interfaces;
 using TapTable.Api.Services.Implementations;
+using TapTable.Api.Services.Interfaces;
+using TapTableAPI.Repositories.Interfaces;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -107,14 +107,19 @@ builder.Services.AddSignalR();
 //
 // ── Repositories ───────────────────────────────────────────────────────────
 //
+builder.Services.AddScoped<ITableRepository, TableRepository>();
 builder.Services.AddScoped<IAuthRepository, AuthRepository>();
 builder.Services.AddScoped<IQrSessionRepository, QrSessionRepository>();
+builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
+builder.Services.AddScoped<IMenuItemRepository, MenuItemRepository>();
 
 //
 // ── Services ───────────────────────────────────────────────────────────────
 //
+builder.Services.AddScoped<ITableService, TableService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IQrSessionService, QrSessionService>();
+builder.Services.AddScoped<IMenuService, MenuService>();
 
 //
 // ── Build ──────────────────────────────────────────────────────────────────

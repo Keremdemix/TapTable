@@ -37,4 +37,16 @@ public class QrSessionRepository : IQrSessionRepository
         _context.QrSessions.Update(session);
         await _context.SaveChangesAsync();
     }
+
+    public async Task CloseActiveSessionAsync(int tableId)
+    {
+        var session = await _context.QrSessions
+            .FirstOrDefaultAsync(x => x.TableId == tableId && x.IsActive);
+
+        if (session is null) return;
+
+        session.IsActive = false;
+        session.ExpiresAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+    }
 }

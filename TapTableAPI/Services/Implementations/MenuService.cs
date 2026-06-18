@@ -1,151 +1,240 @@
-using TapTable.Api.DTOs.Menu;
 using TapTable.Api.Data.Entities;
+using TapTable.Api.DTOs.Request.Menu;
+using TapTable.Api.DTOs.Response.Menu;
 using TapTable.Api.Repositories.Interfaces;
 using TapTable.Api.Services.Interfaces;
+using TapTableAPI.Repositories.Interfaces;
 
 namespace TapTable.Api.Services.Implementations;
 
 public class MenuService : IMenuService
 {
-    private readonly IMenuRepository _menuRepository;
+    private readonly ICategoryRepository _categoryRepository;
+    private readonly IMenuItemRepository _menuItemRepository;
+    private readonly ITableRepository _tableRepository;
 
-    public MenuService(IMenuRepository menuRepository)
+    public MenuService(
+        ICategoryRepository categoryRepository,
+        IMenuItemRepository menuItemRepository,
+        ITableRepository tableRepository)
     {
-        _menuRepository = menuRepository;
+        _categoryRepository = categoryRepository;
+        _menuItemRepository = menuItemRepository;
+        _tableRepository = tableRepository;
     }
 
-    public async Task<IEnumerable<MenuDto>> GetMenusAsync(int restaurantId)
+    // ── Kategori — Admin ─────────────────────────────────────────────────
+
+    public async Task<IEnumerable<CategoryResponseDto>> GetCategoriesAsync(int restaurantId)
     {
-        var menus = await _menuRepository.GetMenusByRestaurantAsync(restaurantId);
-        return menus.Select(MapToMenuDto);
+        var categories = await _categoryRepository.GetAllAsync(restaurantId);
+
+        var result = new List<CategoryResponseDto>();
+        foreach (var category in categories)
+        {
+            var itemCount = await _menuItemRepository.CountByCategoryAsync(category.Id);
+            result.Add(MapToDto(category, itemCount));
+        }
+
+        return result;
     }
 
-    public async Task<MenuDto> GetMenuByIdAsync(int menuId, int restaurantId)
+    public async Task<CategoryResponseDto> CreateCategoryAsync(int restaurantId, CreateCategoryRequestDto request)
     {
-        var menu = await _menuRepository.GetMenuByIdAsync(menuId, restaurantId)
-            ?? throw new KeyNotFoundException($"Menü bulunamadı: {menuId}");
-        return MapToMenuDto(menu);
-    }
+        if (string.IsNullOrWhiteSpace(request.Name))
+            throw new ArgumentException("Kategori adı boş olamaz.");
 
-    public async Task<MenuDto> CreateMenuAsync(int restaurantId, CreateMenuDto request)
-    {
-        var menu = new Menu
+        var category = new Category
         {
             RestaurantId = restaurantId,
-            Name = request.Name,
-            Description = request.Description,
-            IsActive = true,
-            CreatedAt = DateTime.UtcNow
+            Name = request.Name.Trim(),
+            SortOrder = request.SortOrder,
+            IsActive = true
         };
-        var created = await _menuRepository.CreateMenuAsync(menu);
-        return MapToMenuDto(created);
+
+        var created = await _categoryRepository.CreateAsync(category);
+        return MapToDto(created, 0);
     }
 
-    public async Task<MenuDto> UpdateMenuAsync(int menuId, int restaurantId, UpdateMenuDto request)
+    public async Task<CategoryResponseDto> UpdateCategoryAsync(int categoryId, int restaurantId, UpdateCategoryRequestDto request)
     {
-        var menu = await _menuRepository.GetMenuByIdAsync(menuId, restaurantId)
-            ?? throw new KeyNotFoundException($"Menü bulunamadı: {menuId}");
+        var category = await _categoryRepository.GetByIdAsync(categoryId, restaurantId)
+            ?? throw new KeyNotFoundException($"Kategori bulunamadı: {categoryId}");
 
-        menu.Name = request.Name;
-        menu.Description = request.Description;
-        menu.IsActive = request.IsActive;
-        menu.UpdatedAt = DateTime.UtcNow;
+        if (string.IsNullOrWhiteSpace(request.Name))
+            throw new ArgumentException("Kategori adı boş olamaz.");
 
-        var updated = await _menuRepository.UpdateMenuAsync(menu);
-        return MapToMenuDto(updated);
+        category.Name = request.Name.Trim();
+        category.SortOrder = request.SortOrder;
+        category.IsActive = request.IsActive;
+
+        var updated = await _categoryRepository.UpdateAsync(category);
+        var itemCount = await _menuItemRepository.CountByCategoryAsync(categoryId);
+        return MapToDto(updated, itemCount);
     }
 
-    public async Task DeleteMenuAsync(int menuId, int restaurantId)
+    public async Task DeleteCategoryAsync(int categoryId, int restaurantId)
     {
-        var menu = await _menuRepository.GetMenuByIdAsync(menuId, restaurantId)
-            ?? throw new KeyNotFoundException($"Menü bulunamadı: {menuId}");
-        await _menuRepository.DeleteMenuAsync(menu);
+        var category = await _categoryRepository.GetByIdAsync(categoryId, restaurantId)
+            ?? throw new KeyNotFoundException($"Kategori bulunamadı: {categoryId}");
+
+        var itemCount = await _menuItemRepository.CountByCategoryAsync(categoryId);
+        if (itemCount > 0)
+            throw new InvalidOperationException("Bu kategoride aktif ürünler var. Önce ürünleri silin veya başka kategoriye taşıyın.");
+
+        await _categoryRepository.DeleteAsync(category);
     }
 
-    public async Task<IEnumerable<MenuItemDto>> GetMenuItemsAsync(int menuId, int restaurantId)
+    // ── Ürün — Admin ─────────────────────────────────────────────────────
+
+    public async Task<IEnumerable<MenuItemResponseDto>> GetMenuItemsAsync(int restaurantId, int? categoryId = null)
     {
-        var items = await _menuRepository.GetMenuItemsByMenuAsync(menuId, restaurantId);
-        return items.Select(MapToMenuItemDto);
+        var items = await _menuItemRepository.GetAllAsync(restaurantId, categoryId);
+        return items.Select(MapToDto);
     }
 
-    public async Task<MenuItemDto> GetMenuItemByIdAsync(int itemId, int restaurantId)
+    public async Task<MenuItemResponseDto> GetMenuItemAsync(int itemId, int restaurantId)
     {
-        var item = await _menuRepository.GetMenuItemByIdAsync(itemId, restaurantId)
+        var item = await _menuItemRepository.GetByIdAsync(itemId, restaurantId)
             ?? throw new KeyNotFoundException($"Ürün bulunamadı: {itemId}");
-        return MapToMenuItemDto(item);
+
+        return MapToDto(item);
     }
 
-    public async Task<MenuItemDto> CreateMenuItemAsync(int restaurantId, CreateMenuItemDto request)
+    public async Task<MenuItemResponseDto> CreateMenuItemAsync(int restaurantId, CreateMenuItemRequestDto request)
     {
+        if (string.IsNullOrWhiteSpace(request.Name))
+            throw new ArgumentException("Ürün adı boş olamaz.");
+
+        if (request.Price < 0)
+            throw new ArgumentException("Fiyat negatif olamaz.");
+
+        // Kategori bu restorana mı ait, kontrol et — yoksa başka restoranın
+        // kategorisine ürün eklenebilir
+        var category = await _categoryRepository.GetByIdAsync(request.CategoryId, restaurantId)
+            ?? throw new KeyNotFoundException($"Kategori bulunamadı: {request.CategoryId}");
+
         var item = new MenuItem
         {
-            MenuId = request.MenuId,
-            Name = request.Name,
+            CategoryId = category.Id,
+            Name = request.Name.Trim(),
             Description = request.Description,
             Price = request.Price,
             ImageUrl = request.ImageUrl,
+            SortOrder = request.SortOrder,
             IsAvailable = true,
+            IsActive = true,
             CreatedAt = DateTime.UtcNow
         };
-        var created = await _menuRepository.CreateMenuItemAsync(item);
-        return MapToMenuItemDto(created);
+
+        var created = await _menuItemRepository.CreateAsync(item);
+        created.Category = category;
+        return MapToDto(created);
     }
 
-    public async Task<MenuItemDto> UpdateMenuItemAsync(int itemId, int restaurantId, UpdateMenuItemDto request)
+    public async Task<MenuItemResponseDto> UpdateMenuItemAsync(int itemId, int restaurantId, UpdateMenuItemRequestDto request)
     {
-        var item = await _menuRepository.GetMenuItemByIdAsync(itemId, restaurantId)
+        var item = await _menuItemRepository.GetByIdAsync(itemId, restaurantId)
             ?? throw new KeyNotFoundException($"Ürün bulunamadı: {itemId}");
 
-        item.Name = request.Name;
+        if (string.IsNullOrWhiteSpace(request.Name))
+            throw new ArgumentException("Ürün adı boş olamaz.");
+
+        if (request.Price < 0)
+            throw new ArgumentException("Fiyat negatif olamaz.");
+
+        if (request.CategoryId != item.CategoryId)
+        {
+            var newCategory = await _categoryRepository.GetByIdAsync(request.CategoryId, restaurantId)
+                ?? throw new KeyNotFoundException($"Kategori bulunamadı: {request.CategoryId}");
+            item.CategoryId = newCategory.Id;
+            item.Category = newCategory;
+        }
+
+        item.Name = request.Name.Trim();
         item.Description = request.Description;
         item.Price = request.Price;
         item.ImageUrl = request.ImageUrl;
+        item.SortOrder = request.SortOrder;
         item.IsAvailable = request.IsAvailable;
-        item.UpdatedAt = DateTime.UtcNow;
+        item.IsActive = request.IsActive;
 
-        var updated = await _menuRepository.UpdateMenuItemAsync(item);
-        return MapToMenuItemDto(updated);
+        var updated = await _menuItemRepository.UpdateAsync(item);
+        return MapToDto(updated);
+    }
+
+    public async Task<MenuItemResponseDto> SetAvailabilityAsync(int itemId, int restaurantId, bool isAvailable)
+    {
+        var item = await _menuItemRepository.GetByIdAsync(itemId, restaurantId)
+            ?? throw new KeyNotFoundException($"Ürün bulunamadı: {itemId}");
+
+        item.IsAvailable = isAvailable;
+        var updated = await _menuItemRepository.UpdateAsync(item);
+        return MapToDto(updated);
     }
 
     public async Task DeleteMenuItemAsync(int itemId, int restaurantId)
     {
-        var item = await _menuRepository.GetMenuItemByIdAsync(itemId, restaurantId)
-            ?? throw new KeyNotFoundException($"Ürün bulunamadı: {itemId}");
-        await _menuRepository.DeleteMenuItemAsync(item);
-    }
-
-    public async Task<MenuItemDto> ToggleAvailabilityAsync(int itemId, int restaurantId)
-    {
-        var item = await _menuRepository.GetMenuItemByIdAsync(itemId, restaurantId)
+        var item = await _menuItemRepository.GetByIdAsync(itemId, restaurantId)
             ?? throw new KeyNotFoundException($"Ürün bulunamadı: {itemId}");
 
-        item.IsAvailable = !item.IsAvailable;
-        item.UpdatedAt = DateTime.UtcNow;
-
-        var updated = await _menuRepository.UpdateMenuItemAsync(item);
-        return MapToMenuItemDto(updated);
+        await _menuItemRepository.DeleteAsync(item);
     }
 
-    // ── Mappers ──────────────────────────────────────────────────────────────
+    // ── Müşteri — Public ─────────────────────────────────────────────────
 
-    private static MenuDto MapToMenuDto(Menu m) => new()
+    public async Task<PublicMenuResponseDto> GetPublicMenuByTableAsync(int tableId)
     {
-        Id = m.Id,
-        Name = m.Name,
-        Description = m.Description,
-        IsActive = m.IsActive,
-        CreatedAt = m.CreatedAt
+        var table = await _tableRepository.GetByIdAsync(tableId)
+            ?? throw new KeyNotFoundException($"Masa bulunamadı: {tableId}");
+
+        var categories = await _categoryRepository.GetPublicMenuAsync(table.RestaurantId);
+
+        return new PublicMenuResponseDto
+        {
+            RestaurantId = table.RestaurantId,
+            RestaurantName = table.Restaurant?.Name ?? string.Empty,
+            Categories = categories.Select(c => new PublicCategoryDto
+            {
+                Id = c.Id,
+                Name = c.Name,
+                Items = c.MenuItems.Select(m => new PublicMenuItemDto
+                {
+                    Id = m.Id,
+                    Name = m.Name,
+                    Description = m.Description,
+                    Price = m.Price,
+                    ImageUrl = m.ImageUrl
+                }).ToList()
+            }).ToList()
+        };
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────
+
+    private static CategoryResponseDto MapToDto(Category c, int itemCount) => new()
+    {
+        Id = c.Id,
+        RestaurantId = c.RestaurantId,
+        Name = c.Name,
+        SortOrder = c.SortOrder,
+        IsActive = c.IsActive,
+        MenuItemCount = itemCount
     };
 
-    private static MenuItemDto MapToMenuItemDto(MenuItem i) => new()
+    private static MenuItemResponseDto MapToDto(MenuItem m) => new()
     {
-        Id = i.Id,
-        MenuId = i.MenuId,
-        Name = i.Name,
-        Description = i.Description,
-        Price = i.Price,
-        ImageUrl = i.ImageUrl,
-        IsAvailable = i.IsAvailable,
-        CreatedAt = i.CreatedAt
+        Id = m.Id,
+        CategoryId = m.CategoryId,
+        CategoryName = m.Category?.Name ?? string.Empty,
+        Name = m.Name,
+        Description = m.Description,
+        Price = m.Price,
+        ImageUrl = m.ImageUrl,
+        IsAvailable = m.IsAvailable,
+        IsActive = m.IsActive,
+        SortOrder = m.SortOrder,
+        CreatedAt = m.CreatedAt,
+        UpdatedAt = m.UpdatedAt
     };
 }

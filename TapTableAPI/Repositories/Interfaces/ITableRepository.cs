@@ -4,13 +4,10 @@ namespace TapTable.Api.Repositories.Interfaces;
 
 public interface ITableRepository
 {
-    Task<List<RestaurantTable>> GetTablesAsync(int restaurantId);
-    Task<RestaurantTable?> GetTableByIdAsync(int id);
-    Task<RestaurantTable?> GetTableWithActiveOrderAsync(int tableId);
-    Task<bool> TableNumberExistsAsync(int restaurantId, int tableNumber);
-    Task<RestaurantTable> CreateTableAsync(RestaurantTable table);
-    Task UpdateTableAsync(RestaurantTable table);
-    Task UpsertLayoutAsync(TableLayout layout);
-
-    Task SaveChangesAsync();
+    Task<RestaurantTable?> GetByIdAsync(int id, int restaurantId);
+    Task<RestaurantTable?> GetByIdAsync(int id); // restoran bilinmeden, QR/public akýþ için
+    Task<IEnumerable<RestaurantTable>> GetAllAsync(int restaurantId);
+    Task<RestaurantTable> CreateAsync(RestaurantTable table);
+    Task<RestaurantTable> UpdateAsync(RestaurantTable table);
+    Task DeleteAsync(RestaurantTable table);
 }

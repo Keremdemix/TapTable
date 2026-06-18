@@ -9,4 +9,5 @@ public interface IQrSessionRepository
 
     Task CreateAsync(QrSession session);
     Task UpdateAsync(QrSession session);
+    Task CloseActiveSessionAsync(int tableId);
 }
