@@ -1,6 +1,6 @@
 using TapTable.Api.Data.Entities;
-using TapTable.Api.Data.Enums;
-using TapTable.Api.DTOs.Order;
+using TapTable.Api.DTOs.Request.Order;
+using TapTable.Api.DTOs.Response.Order;
 using TapTable.Api.Repositories.Interfaces;
 using TapTable.Api.Services.Interfaces;
 
@@ -9,181 +9,236 @@ namespace TapTable.Api.Services.Implementations;
 public class OrderService : IOrderService
 {
     private readonly IOrderRepository _orderRepository;
-    private readonly IMenuRepository _menuRepository;
+    private readonly IMenuItemRepository _menuItemRepository;
     private readonly ITableRepository _tableRepository;
+    private readonly IQrSessionRepository _qrSessionRepository;
 
     public OrderService(
         IOrderRepository orderRepository,
-        IMenuRepository menuRepository,
-        ITableRepository tableRepository)
+        IMenuItemRepository menuItemRepository,
+        ITableRepository tableRepository,
+        IQrSessionRepository qrSessionRepository)
     {
         _orderRepository = orderRepository;
-        _menuRepository = menuRepository;
+        _menuItemRepository = menuItemRepository;
         _tableRepository = tableRepository;
+        _qrSessionRepository = qrSessionRepository;
     }
 
-    public async Task<IEnumerable<OrderDto>> GetActiveOrdersAsync(int restaurantId)
+    // ── Müşteri — Public ─────────────────────────────────────────────────
+
+    public async Task<OrderResponseDto> PlaceOrderAsync(int tableId, PlaceOrderRequestDto request)
     {
-        var orders = await _orderRepository.GetActiveOrdersAsync(restaurantId);
-        return orders.Select(MapToOrderDto);
+        var table = await ValidateSessionAsync(tableId, request.SessionKey);
+        var order = await CreateOrAppendOrderAsync(table, waiterId: null, request.Items, request.Note);
+        return MapToDto(order);
     }
 
-    public async Task<IEnumerable<OrderDto>> GetOrderHistoryAsync(int restaurantId, OrderFilterDto filter)
+    public async Task<OrderResponseDto?> GetActiveOrderAsync(int tableId, string sessionKey)
     {
-        var orders = await _orderRepository.GetOrderHistoryAsync(restaurantId, filter.StartDate, filter.EndDate, filter.Status);
-        return orders.Select(MapToOrderDto);
+        var table = await ValidateSessionAsync(tableId, sessionKey);
+        var order = await _orderRepository.GetActiveOrderByTableAsync(table.Id);
+        return order is null ? null : MapToDto(order);
     }
 
-    public async Task<OrderDto> GetOrderByIdAsync(int orderId, int restaurantId)
+    public async Task<OrderResponseDto> TrackOrderAsync(int tableId, string sessionKey, int orderId)
     {
-        var order = await _orderRepository.GetOrderByIdAsync(orderId, restaurantId)
+        var table = await ValidateSessionAsync(tableId, sessionKey);
+
+        var order = await _orderRepository.GetByIdAsync(orderId, table.RestaurantId)
             ?? throw new KeyNotFoundException($"Sipariş bulunamadı: {orderId}");
-        return MapToOrderDto(order);
+
+        if (order.TableId != table.Id)
+            throw new UnauthorizedAccessException("Bu siparişe erişim yetkiniz yok.");
+
+        return MapToDto(order);
     }
 
-    public async Task<OrderDto> CreateOrderAsync(int restaurantId, int tableId, CreateOrderDto request)
-    {
-        var table = await _tableRepository.GetTableByIdAsync(tableId, restaurantId)
-            ?? throw new KeyNotFoundException("Masa bulunamadı.");
+    // ── Personel — Waiter/Kitchen/Admin ─────────────────────────────────
 
-        var orderItems = new List<OrderItem>();
-        foreach (var itemRequest in request.Items)
+    public async Task<OrderResponseDto> CreateOrderByStaffAsync(int restaurantId, int? waiterId, StaffCreateOrderRequestDto request)
+    {
+        var table = await _tableRepository.GetByIdAsync(request.TableId, restaurantId)
+            ?? throw new KeyNotFoundException($"Masa bulunamadı: {request.TableId}");
+
+        var order = await CreateOrAppendOrderAsync(table, waiterId, request.Items, request.Note);
+        return MapToDto(order);
+    }
+
+    public async Task<IEnumerable<OrderResponseDto>> GetOrdersAsync(int restaurantId, OrderStatus? status, int? tableId)
+    {
+        var orders = await _orderRepository.GetAllAsync(restaurantId, status, tableId);
+        return orders.Select(MapToDto);
+    }
+
+    public async Task<OrderResponseDto> GetOrderAsync(int orderId, int restaurantId)
+    {
+        var order = await _orderRepository.GetByIdAsync(orderId, restaurantId)
+            ?? throw new KeyNotFoundException($"Sipariş bulunamadı: {orderId}");
+
+        return MapToDto(order);
+    }
+
+    public async Task<OrderResponseDto> UpdateOrderItemStatusAsync(int orderId, int itemId, int restaurantId, OrderItemStatus status)
+    {
+        var item = await _orderRepository.GetItemAsync(orderId, itemId, restaurantId)
+            ?? throw new KeyNotFoundException($"Sipariş kalemi bulunamadı: {itemId}");
+
+        item.Status = status;
+        await _orderRepository.UpdateItemStatusAsync(item);
+
+        var order = await _orderRepository.GetByIdAsync(orderId, restaurantId)
+            ?? throw new KeyNotFoundException($"Sipariş bulunamadı: {orderId}");
+
+        return MapToDto(order);
+    }
+
+    public async Task<OrderResponseDto> UpdateOrderStatusAsync(int orderId, int restaurantId, OrderStatus status)
+    {
+        var order = await _orderRepository.GetByIdAsync(orderId, restaurantId)
+            ?? throw new KeyNotFoundException($"Sipariş bulunamadı: {orderId}");
+
+        order.Status = status;
+
+        // Sipariş kapanınca (ödendi/iptal) masa tekrar müsait olsun
+        if (status == OrderStatus.Completed || status == OrderStatus.Cancelled)
         {
-            var menuItem = await _menuRepository.GetMenuItemByIdAsync(itemRequest.MenuItemId, restaurantId)
-                ?? throw new KeyNotFoundException($"Ürün bulunamadı: {itemRequest.MenuItemId}");
+            var table = await _tableRepository.GetByIdAsync(order.TableId, restaurantId);
+            if (table is not null)
+            {
+                table.Status = TableStatus.Available;
+                await _tableRepository.UpdateAsync(table);
+            }
+        }
+
+        var updated = await _orderRepository.UpdateAsync(order);
+        return MapToDto(updated);
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────
+
+    private async Task<RestaurantTable> ValidateSessionAsync(int tableId, string sessionKey)
+    {
+        if (string.IsNullOrWhiteSpace(sessionKey))
+            throw new UnauthorizedAccessException("Geçersiz oturum.");
+
+        var session = await _qrSessionRepository.GetActiveByKeyAsync(sessionKey)
+            ?? throw new UnauthorizedAccessException("Oturum geçersiz veya süresi dolmuş.");
+
+        if (session.TableId != tableId)
+            throw new UnauthorizedAccessException("Oturum bu masaya ait değil.");
+
+        var table = await _tableRepository.GetByIdAsync(tableId)
+            ?? throw new KeyNotFoundException($"Masa bulunamadı: {tableId}");
+
+        if (!table.IsActive)
+            throw new InvalidOperationException("Bu masa şu an aktif değil.");
+
+        return table;
+    }
+
+    private async Task<Order> CreateOrAppendOrderAsync(
+        RestaurantTable table,
+        int? waiterId,
+        List<OrderItemRequestDto> requestItems,
+        string? note)
+    {
+        if (requestItems is null || requestItems.Count == 0)
+            throw new ArgumentException("Sipariş en az bir ürün içermeli.");
+
+        if (requestItems.Any(i => i.Quantity <= 0))
+            throw new ArgumentException("Ürün adedi sıfırdan büyük olmalı.");
+
+        // Fiyatlar ve mevcutluk DB'den doğrulanır — müşteriden gelen fiyata güvenilmez
+        var menuItemIds = requestItems.Select(i => i.MenuItemId).Distinct();
+        var menuItems = await _menuItemRepository.GetByIdsAsync(menuItemIds, table.RestaurantId);
+
+        foreach (var requested in requestItems)
+        {
+            var menuItem = menuItems.FirstOrDefault(m => m.Id == requested.MenuItemId)
+                ?? throw new KeyNotFoundException($"Ürün bulunamadı: {requested.MenuItemId}");
 
             if (!menuItem.IsAvailable)
                 throw new InvalidOperationException($"'{menuItem.Name}' şu an mevcut değil.");
-
-            orderItems.Add(new OrderItem
-            {
-                MenuItemId = menuItem.Id,
-                MenuItemName = menuItem.Name,
-                UnitPrice = menuItem.Price,
-                Quantity = itemRequest.Quantity,
-                Notes = itemRequest.Notes,
-                Status = OrderItemStatus.Pending,
-                CreatedAt = DateTime.UtcNow
-            });
         }
 
-        var order = new Order
+        var newItems = requestItems.Select(requested =>
         {
-            RestaurantId = restaurantId,
-            TableId = tableId,
-            TableName = table.Name,
-            Status = OrderStatus.Pending,
-            Notes = request.Notes,
-            Items = orderItems,
-            TotalAmount = orderItems.Sum(i => i.UnitPrice * i.Quantity),
-            CreatedAt = DateTime.UtcNow
-        };
-
-        var created = await _orderRepository.CreateOrderAsync(order);
-        return MapToOrderDto(created);
-    }
-
-    public async Task<OrderDto> AddItemsToOrderAsync(int orderId, int restaurantId, AddOrderItemsDto request)
-    {
-        var order = await _orderRepository.GetOrderByIdAsync(orderId, restaurantId)
-            ?? throw new KeyNotFoundException($"Sipariş bulunamadı: {orderId}");
-
-        if (order.Status is OrderStatus.Delivered or OrderStatus.Cancelled)
-            throw new InvalidOperationException("Tamamlanmış veya iptal edilmiş siparişe ürün eklenemez.");
-
-        foreach (var itemRequest in request.Items)
-        {
-            var menuItem = await _menuRepository.GetMenuItemByIdAsync(itemRequest.MenuItemId, restaurantId)
-                ?? throw new KeyNotFoundException($"Ürün bulunamadı: {itemRequest.MenuItemId}");
-
-            order.Items.Add(new OrderItem
+            var menuItem = menuItems.First(m => m.Id == requested.MenuItemId);
+            return new OrderItem
             {
-                OrderId = orderId,
                 MenuItemId = menuItem.Id,
-                MenuItemName = menuItem.Name,
+                Quantity = requested.Quantity,
                 UnitPrice = menuItem.Price,
-                Quantity = itemRequest.Quantity,
-                Notes = itemRequest.Notes,
-                Status = OrderItemStatus.Pending,
-                CreatedAt = DateTime.UtcNow
-            });
+                Note = requested.Note,
+                Status = OrderItemStatus.Pending
+            };
+        }).ToList();
+
+        var activeOrder = await _orderRepository.GetActiveOrderByTableAsync(table.Id);
+
+        if (activeOrder is null)
+        {
+            var order = new Order
+            {
+                TableId = table.Id,
+                WaiterId = waiterId,
+                Status = OrderStatus.Pending,
+                PaymentStatus = OrderPaymentStatus.Unpaid,
+                Note = note,
+                CreatedAt = DateTime.UtcNow,
+                Items = newItems
+            };
+            order.TotalPrice = order.Items.Sum(i => i.UnitPrice * i.Quantity);
+
+            var created = await _orderRepository.CreateAsync(order);
+
+            table.Status = TableStatus.Occupied;
+            await _tableRepository.UpdateAsync(table);
+
+            return created;
         }
 
-        order.TotalAmount = order.Items.Sum(i => i.UnitPrice * i.Quantity);
-        order.UpdatedAt = DateTime.UtcNow;
+        // Mevcut siparişe ekleme — ilk kez bir personel dokunuyorsa garson ataması yapılır
+        if (waiterId.HasValue && activeOrder.WaiterId is null)
+            activeOrder.WaiterId = waiterId;
 
-        var updated = await _orderRepository.UpdateOrderAsync(order);
-        return MapToOrderDto(updated);
+        foreach (var item in newItems)
+            activeOrder.Items.Add(item);
+
+        if (!string.IsNullOrWhiteSpace(note))
+            activeOrder.Note = note;
+
+        activeOrder.TotalPrice = activeOrder.Items.Sum(i => i.UnitPrice * i.Quantity);
+
+        return await _orderRepository.UpdateAsync(activeOrder);
     }
 
-    public async Task<OrderDto> UpdateOrderItemStatusAsync(int orderId, int itemId, int restaurantId, UpdateOrderItemStatusDto request)
-    {
-        var order = await _orderRepository.GetOrderByIdAsync(orderId, restaurantId)
-            ?? throw new KeyNotFoundException($"Sipariş bulunamadı: {orderId}");
+    // ── Mapper ───────────────────────────────────────────────────────────
 
-        var item = order.Items.FirstOrDefault(i => i.Id == itemId)
-            ?? throw new KeyNotFoundException($"Sipariş kalemi bulunamadı: {itemId}");
-
-        item.Status = request.Status;
-        item.UpdatedAt = DateTime.UtcNow;
-        order.UpdatedAt = DateTime.UtcNow;
-
-        var updated = await _orderRepository.UpdateOrderAsync(order);
-        return MapToOrderDto(updated);
-    }
-
-    public async Task<OrderDto> UpdateOrderStatusAsync(int orderId, int restaurantId, UpdateOrderStatusDto request)
-    {
-        var order = await _orderRepository.GetOrderByIdAsync(orderId, restaurantId)
-            ?? throw new KeyNotFoundException($"Sipariş bulunamadı: {orderId}");
-
-        order.Status = request.Status;
-        order.UpdatedAt = DateTime.UtcNow;
-
-        var updated = await _orderRepository.UpdateOrderAsync(order);
-        return MapToOrderDto(updated);
-    }
-
-    public async Task CancelOrderAsync(int orderId, int restaurantId)
-    {
-        var order = await _orderRepository.GetOrderByIdAsync(orderId, restaurantId)
-            ?? throw new KeyNotFoundException($"Sipariş bulunamadı: {orderId}");
-
-        if (order.Status == OrderStatus.Delivered)
-            throw new InvalidOperationException("Teslim edilmiş sipariş iptal edilemez.");
-
-        order.Status = OrderStatus.Cancelled;
-        order.UpdatedAt = DateTime.UtcNow;
-        await _orderRepository.UpdateOrderAsync(order);
-    }
-
-    public async Task<OrderDto?> GetActiveOrderByTableAsync(int tableId, int restaurantId)
-    {
-        var order = await _orderRepository.GetActiveOrderByTableAsync(tableId, restaurantId);
-        return order is null ? null : MapToOrderDto(order);
-    }
-
-    // ── Mapper ───────────────────────────────────────────────────────────────
-
-    private static OrderDto MapToOrderDto(Order o) => new()
+    private static OrderResponseDto MapToDto(Order o) => new()
     {
         Id = o.Id,
-        RestaurantId = o.RestaurantId,
         TableId = o.TableId,
-        TableName = o.TableName,
-        Status = o.Status,
-        Notes = o.Notes,
-        TotalAmount = o.TotalAmount,
-        Items = o.Items.Select(i => new OrderItemDto
+        TableNumber = o.Table?.TableNumber ?? 0,
+        WaiterId = o.WaiterId,
+        WaiterName = o.Waiter?.FullName,
+        Status = o.Status.ToString(),
+        PaymentStatus = o.PaymentStatus.ToString(),
+        TotalPrice = o.TotalPrice,
+        Note = o.Note,
+        Items = o.Items.Select(i => new OrderItemResponseDto
         {
             Id = i.Id,
             MenuItemId = i.MenuItemId,
-            MenuItemName = i.MenuItemName,
-            UnitPrice = i.UnitPrice,
+            MenuItemName = i.MenuItem?.Name ?? string.Empty,
             Quantity = i.Quantity,
-            Notes = i.Notes,
-            Status = i.Status
+            UnitPrice = i.UnitPrice,
+            LineTotal = i.UnitPrice * i.Quantity,
+            Note = i.Note,
+            Status = i.Status.ToString()
         }).ToList(),
-        CreatedAt = o.CreatedAt
+        CreatedAt = o.CreatedAt,
+        UpdatedAt = o.UpdatedAt
     };
 }

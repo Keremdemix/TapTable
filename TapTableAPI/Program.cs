@@ -112,6 +112,7 @@ builder.Services.AddScoped<IAuthRepository, AuthRepository>();
 builder.Services.AddScoped<IQrSessionRepository, QrSessionRepository>();
 builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
 builder.Services.AddScoped<IMenuItemRepository, MenuItemRepository>();
+builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 
 //
 // ── Services ───────────────────────────────────────────────────────────────
@@ -120,6 +121,7 @@ builder.Services.AddScoped<ITableService, TableService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IQrSessionService, QrSessionService>();
 builder.Services.AddScoped<IMenuService, MenuService>();
+builder.Services.AddScoped<IOrderService, OrderService>();
 
 //
 // ── Build ──────────────────────────────────────────────────────────────────

@@ -144,8 +144,17 @@ public class TapTableDbContext : DbContext
         modelBuilder.Entity<Order>(e =>
         {
             e.HasKey(x => x.Id);
-            e.Property(x => x.Status).HasMaxLength(50).HasDefaultValue("Pending");
-            e.Property(x => x.PaymentStatus).HasMaxLength(50).HasDefaultValue("Unpaid");
+
+            e.Property(x => x.Status)
+             .HasConversion<string>()
+             .HasMaxLength(50)
+             .HasDefaultValue(OrderStatus.Pending);
+
+            e.Property(x => x.PaymentStatus)
+             .HasConversion<string>()
+             .HasMaxLength(50)
+             .HasDefaultValue(OrderPaymentStatus.Unpaid);
+
             e.Property(x => x.TotalPrice).HasColumnType("decimal(18,2)").HasDefaultValue(0);
             e.Property(x => x.Note).HasMaxLength(500);
             e.Property(x => x.CreatedAt).HasDefaultValueSql("GETDATE()");
@@ -167,8 +176,14 @@ public class TapTableDbContext : DbContext
         modelBuilder.Entity<OrderItem>(e =>
         {
             e.HasKey(x => x.Id);
+            e.Property(x => x.Quantity).IsRequired();
             e.Property(x => x.UnitPrice).HasColumnType("decimal(18,2)");
             e.Property(x => x.Note).HasMaxLength(300);
+
+            e.Property(x => x.Status)
+             .HasConversion<string>()
+             .HasMaxLength(50)
+             .HasDefaultValue(OrderItemStatus.Pending);
 
             e.HasOne(x => x.Order)
              .WithMany(o => o.Items)

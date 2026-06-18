@@ -49,4 +49,9 @@ public class QrSessionRepository : IQrSessionRepository
         session.ExpiresAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
     }
+    public async Task<QrSession?> GetActiveByKeyAsync(string sessionKey)
+    {
+        return await _context.QrSessions
+            .FirstOrDefaultAsync(s => s.SessionKey == sessionKey && s.IsActive);
+    }
 }
