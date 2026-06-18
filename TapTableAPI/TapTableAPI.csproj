@@ -19,7 +19,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="DTOs\Request\Order\" />
     <Folder Include="DTOs\Request\Table\" />
     <Folder Include="DTOs\Request\Payment\" />
     <Folder Include="Middleware\" />

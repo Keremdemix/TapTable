@@ -4,12 +4,11 @@ namespace TapTable.Api.Repositories.Interfaces;
 
 public interface IOrderRepository
 {
-    Task<Order?> GetOrderByIdAsync(int id);
-    Task<List<Order>> GetOrdersByTableAsync(int tableId);
-    Task<List<Order>> GetActiveOrdersAsync(int restaurantId);
-    Task<Order> CreateOrderAsync(Order order);
-    Task UpdateOrderAsync(Order order);
-    Task AddOrderItemAsync(OrderItem item);
-
-    Task SaveChangesAsync();
+    Task<Order?> GetActiveOrderByTableAsync(int tableId);
+    Task<Order?> GetByIdAsync(int orderId, int restaurantId);
+    Task<IEnumerable<Order>> GetAllAsync(int restaurantId, OrderStatus? status, int? tableId);
+    Task<Order> CreateAsync(Order order);
+    Task<Order> UpdateAsync(Order order);
+    Task<OrderItem?> GetItemAsync(int orderId, int itemId, int restaurantId);
+    Task UpdateItemStatusAsync(OrderItem item);
 }

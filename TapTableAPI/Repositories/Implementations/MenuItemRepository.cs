@@ -15,13 +15,13 @@ public class MenuItemRepository : IMenuItemRepository
     }
 
     // MenuItem'da RestaurantId yok, Category üzerinden join ile doğrulanıyor
-    public async Task<MenuItem?> GetByIdAsync(int id, int restaurantId)
+    public async Task<List<MenuItem>> GetByIdsAsync(IEnumerable<int> ids, int restaurantId)
     {
+        var idList = ids.ToList();
         return await _context.MenuItems
             .Include(m => m.Category)
-            .FirstOrDefaultAsync(m => m.Id == id
-                                   && m.Category.RestaurantId == restaurantId
-                                   && m.IsActive);
+            .Where(m => idList.Contains(m.Id) && m.Category.RestaurantId == restaurantId && m.IsActive)
+            .ToListAsync();
     }
 
     public async Task<IEnumerable<MenuItem>> GetAllAsync(int restaurantId, int? categoryId = null)

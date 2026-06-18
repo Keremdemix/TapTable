@@ -6,7 +6,7 @@ public interface IQrSessionRepository
 {
     Task<QrSession?> GetActiveByTableIdAsync(int tableId);
     Task<QrSession?> GetBySessionKeyAsync(string sessionKey);
-
+    Task<QrSession?> GetActiveByKeyAsync(string sessionKey);
     Task CreateAsync(QrSession session);
     Task UpdateAsync(QrSession session);
     Task CloseActiveSessionAsync(int tableId);
