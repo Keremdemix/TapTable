@@ -39,6 +39,10 @@ public class TapTableDbContext : DbContext
             e.Property(x => x.Address).HasMaxLength(300);
             e.Property(x => x.Phone).HasMaxLength(50);
             e.Property(x => x.CreatedAt).HasDefaultValueSql("GETDATE()");
+
+            e.Property(x => x.StripeAccountId).HasMaxLength(100);
+            e.Property(x => x.StripeOnboardingCompleted).HasDefaultValue(false);
+            e.Property(x => x.StripeChargesEnabled).HasDefaultValue(false);
         });
 
         // ── User ──────────────────────────────────────────────────────────────

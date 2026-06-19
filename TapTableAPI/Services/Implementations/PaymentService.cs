@@ -16,28 +16,33 @@ public class PaymentService : IPaymentService
     private readonly string _publishableKey;
     private readonly string _webhookSecret;
     private readonly string _currency;
+    private readonly IRestaurantRepository _restaurantRepository;
+    private readonly decimal _platformFeePercent;
 
     public PaymentService(
         IPaymentRepository paymentRepository,
         IOrderRepository orderRepository,
         ITableRepository tableRepository,
         IQrSessionRepository qrSessionRepository,
+        IRestaurantRepository restaurantRepository,
         IConfiguration configuration)
     {
         _paymentRepository = paymentRepository;
         _orderRepository = orderRepository;
         _tableRepository = tableRepository;
         _qrSessionRepository = qrSessionRepository;
+        _restaurantRepository = restaurantRepository;
         _publishableKey = configuration["Stripe:PublishableKey"] ?? string.Empty;
         _webhookSecret = configuration["Stripe:WebhookSecret"] ?? string.Empty;
         _currency = configuration["Stripe:Currency"] ?? "try";
+        _platformFeePercent = decimal.TryParse(configuration["Stripe:PlatformFeePercent"], out var fee) ? fee : 0;
     }
 
     // ── Garson — manuel ödeme ────────────────────────────────────────────
 
     public async Task<PaymentResponseDto> RecordManualPaymentAsync(int restaurantId, RecordManualPaymentRequestDto request)
     {
-        if (request.Method == PaymentMethod.Stripe)
+        if (request.Method == TapTable.Api.Data.Entities.PaymentMethod.Stripe)
             throw new ArgumentException("Manuel ödeme için Stripe seçilemez.");
 
         if (request.Amount <= 0)
@@ -77,6 +82,12 @@ public class PaymentService : IPaymentService
     {
         var table = await ValidateSessionAsync(tableId, request.SessionKey);
 
+        var restaurant = await _restaurantRepository.GetByIdAsync(table.RestaurantId)
+            ?? throw new KeyNotFoundException("Restoran bulunamadı.");
+
+        if (string.IsNullOrEmpty(restaurant.StripeAccountId) || !restaurant.StripeChargesEnabled)
+            throw new InvalidOperationException("Bu restoran henüz online ödeme almaya hazır değil.");
+
         var order = await _orderRepository.GetActiveOrderByTableAsync(table.Id)
             ?? throw new InvalidOperationException("Bu masada aktif sipariş bulunamadı.");
 
@@ -89,15 +100,25 @@ public class PaymentService : IPaymentService
         if (remaining <= 0)
             throw new InvalidOperationException("Ödenecek tutar kalmadı.");
 
+        var amountInCents = (long)(remaining * 100);
+        var applicationFee = _platformFeePercent > 0
+            ? (long)(amountInCents * _platformFeePercent / 100)
+            : (long?)null;
+
         var options = new PaymentIntentCreateOptions
         {
-            Amount = (long)(remaining * 100), // en küçük para birimi (kuruş)
+            Amount = amountInCents,
             Currency = _currency,
-            Metadata = new Dictionary<string, string>
+            ApplicationFeeAmount = applicationFee,
+            TransferData = new PaymentIntentTransferDataOptions
             {
-                { "orderId", order.Id.ToString() },
-                { "tableId", table.Id.ToString() }
+                Destination = restaurant.StripeAccountId
             },
+            Metadata = new Dictionary<string, string>
+        {
+            { "orderId", order.Id.ToString() },
+            { "tableId", table.Id.ToString() }
+        },
             AutomaticPaymentMethods = new PaymentIntentAutomaticPaymentMethodsOptions { Enabled = true }
         };
 
@@ -108,7 +129,7 @@ public class PaymentService : IPaymentService
         {
             OrderId = order.Id,
             Amount = remaining,
-            Method = PaymentMethod.Stripe,
+            Method = TapTable.Api.Data.Entities.PaymentMethod.Stripe,
             SplitType = SplitType.Full,
             Status = PaymentStatus.Pending,
             StripePaymentIntentId = intent.Id,
@@ -125,7 +146,6 @@ public class PaymentService : IPaymentService
             Currency = _currency
         };
     }
-
     public async Task<BillSummaryResponseDto> GetBillAsync(int tableId, string sessionKey)
     {
         var table = await ValidateSessionAsync(tableId, sessionKey);
