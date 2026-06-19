@@ -83,4 +83,12 @@ public class OrderRepository : IOrderRepository
         _context.OrderItems.Update(item);
         await _context.SaveChangesAsync();
     }
+    public async Task<Order?> GetByIdInternalAsync(int orderId)
+    {
+        return await _context.Orders
+            .Include(o => o.Items).ThenInclude(i => i.MenuItem)
+            .Include(o => o.Table)
+            .Include(o => o.Waiter)
+            .FirstOrDefaultAsync(o => o.Id == orderId);
+    }
 }
