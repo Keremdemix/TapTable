@@ -96,7 +96,10 @@ public class OrderService : IOrderService
     public async Task<OrderResponseDto> UpdateOrderStatusAsync(int orderId, int restaurantId, OrderStatus status)
     {
         var order = await _orderRepository.GetByIdAsync(orderId, restaurantId)
-            ?? throw new KeyNotFoundException($"Sipariş bulunamadı: {orderId}");
+        ?? throw new KeyNotFoundException($"Sipariş bulunamadı: {orderId}");
+
+        if (status == OrderStatus.Completed && order.PaymentStatus != OrderPaymentStatus.Paid)
+            throw new InvalidOperationException("Ödeme tamamlanmadan sipariş kapatılamaz.");
 
         order.Status = status;
 

@@ -14,42 +14,45 @@ public class PaymentRepository : IPaymentRepository
         _context = context;
     }
 
-    public async Task<Payment?> GetPaymentByIdAsync(int id)
+    public async Task<Payment?> GetByIdAsync(int id, int restaurantId)
     {
         return await _context.Payments
             .Include(p => p.Order)
-            .FirstOrDefaultAsync(p => p.Id == id);
+            .FirstOrDefaultAsync(p => p.Id == id && p.Order.Table.RestaurantId == restaurantId);
     }
 
-    public async Task<Payment?> GetPaymentByStripeIntentIdAsync(string intentId)
+    public async Task<Payment?> GetByStripeIntentIdAsync(string intentId)
     {
         return await _context.Payments
-            .Include(p => p.Order)
             .FirstOrDefaultAsync(p => p.StripePaymentIntentId == intentId);
     }
 
-    public async Task<List<Payment>> GetPaymentsByOrderAsync(int orderId)
+    public async Task<IEnumerable<Payment>> GetByOrderIdAsync(int orderId, int restaurantId)
     {
         return await _context.Payments
-            .Where(p => p.OrderId == orderId)
+            .Where(p => p.OrderId == orderId && p.Order.Table.RestaurantId == restaurantId)
             .OrderByDescending(p => p.CreatedAt)
             .ToListAsync();
     }
 
-    public async Task<Payment> CreatePaymentAsync(Payment payment)
+    public async Task<decimal> GetSucceededTotalAsync(int orderId)
     {
-        payment.CreatedAt = DateTime.UtcNow;
+        return await _context.Payments
+            .Where(p => p.OrderId == orderId && p.Status == PaymentStatus.Succeeded)
+            .SumAsync(p => p.Amount);
+    }
+
+    public async Task<Payment> CreateAsync(Payment payment)
+    {
         _context.Payments.Add(payment);
+        await _context.SaveChangesAsync();
         return payment;
     }
 
-    public async Task UpdatePaymentAsync(Payment payment)
+    public async Task<Payment> UpdateAsync(Payment payment)
     {
         _context.Payments.Update(payment);
-    }
-
-    public async Task SaveChangesAsync()
-    {
         await _context.SaveChangesAsync();
+        return payment;
     }
 }

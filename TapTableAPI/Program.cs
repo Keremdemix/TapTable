@@ -11,6 +11,7 @@ using TapTable.Api.Repositories.Interfaces;
 using TapTable.Api.Services.Implementations;
 using TapTable.Api.Services.Interfaces;
 using TapTableAPI.Repositories.Interfaces;
+using Stripe;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -113,6 +114,8 @@ builder.Services.AddScoped<IQrSessionRepository, QrSessionRepository>();
 builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
 builder.Services.AddScoped<IMenuItemRepository, MenuItemRepository>();
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
+builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
+builder.Services.AddScoped<IRestaurantRepository, RestaurantRepository>();
 
 //
 // ── Services ───────────────────────────────────────────────────────────────
@@ -122,7 +125,8 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IQrSessionService, QrSessionService>();
 builder.Services.AddScoped<IMenuService, MenuService>();
 builder.Services.AddScoped<IOrderService, OrderService>();
-
+builder.Services.AddScoped<IPaymentService, PaymentService>();
+builder.Services.AddScoped<IStripeConnectService, StripeConnectService>();
 //
 // ── Build ──────────────────────────────────────────────────────────────────
 //
