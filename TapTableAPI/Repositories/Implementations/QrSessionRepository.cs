@@ -54,4 +54,26 @@ public class QrSessionRepository : IQrSessionRepository
         return await _context.QrSessions
             .FirstOrDefaultAsync(s => s.SessionKey == sessionKey && s.IsActive);
     }
+    public async Task<QrSession> RotateSessionAsync(int tableId, int restaurantId)
+    {
+        var activeSessions = await _context.QrSessions
+            .Where(s => s.TableId == tableId && s.IsActive)
+            .ToListAsync();
+
+        foreach (var s in activeSessions)
+            s.IsActive = false;
+
+        var newSession = new QrSession
+        {
+            TableId = tableId,
+            RestaurantId = restaurantId,
+            SessionKey = Guid.NewGuid().ToString("N"),
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _context.QrSessions.Add(newSession);
+        await _context.SaveChangesAsync();
+        return newSession;
+    }
 }

@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using Scalar.AspNetCore;
 using System.Text;
 using TapTable.Api.Configuration;
 using TapTable.Api.Data;
@@ -11,7 +10,6 @@ using TapTable.Api.Repositories.Interfaces;
 using TapTable.Api.Services.Implementations;
 using TapTable.Api.Services.Interfaces;
 using TapTableAPI.Repositories.Interfaces;
-using Stripe;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -97,8 +95,8 @@ builder.Services.AddCors(options =>
 //
 // ── Controllers & OpenAPI ──────────────────────────────────────────────────
 //
-builder.Services.AddControllers();
-builder.Services.AddOpenApi("v1");
+//builder.Services.AddControllers();
+//builder.Services.AddOpenApi("v1");
 
 //
 // ── SignalR ────────────────────────────────────────────────────────────────
@@ -127,6 +125,7 @@ builder.Services.AddScoped<IMenuService, MenuService>();
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<IStripeConnectService, StripeConnectService>();
+builder.Services.AddScoped<ICustomerService, CustomerService>();
 //
 // ── Build ──────────────────────────────────────────────────────────────────
 //
@@ -137,8 +136,8 @@ var app = builder.Build();
 //
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
-    app.MapScalarApiReference();
+    //app.MapOpenApi();
+    //app.MapScalarApiReference();
 }
 
 app.UseHttpsRedirection();
