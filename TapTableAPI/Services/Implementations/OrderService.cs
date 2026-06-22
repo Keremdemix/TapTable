@@ -98,10 +98,19 @@ public class OrderService : IOrderService
         var order = await _orderRepository.GetByIdAsync(orderId, restaurantId)
         ?? throw new KeyNotFoundException($"Sipariş bulunamadı: {orderId}");
 
-        if (status == OrderStatus.Completed && order.PaymentStatus != OrderPaymentStatus.Paid)
-            throw new InvalidOperationException("Ödeme tamamlanmadan sipariş kapatılamaz.");
+        if (order.PaymentStatus == OrderPaymentStatus.Paid)
+        {
+            order.Status = OrderStatus.Completed;
 
-        order.Status = status;
+            var table = await _tableRepository.GetByIdAsync(order.TableId, order.Table.RestaurantId);
+            if (table is not null)
+            {
+                table.Status = TableStatus.Available;
+                await _tableRepository.UpdateAsync(table);
+            }
+
+            await _qrSessionRepository.RotateSessionAsync(order.TableId, order.Table.RestaurantId); // YENİ
+        }
 
         // Sipariş kapanınca (ödendi/iptal) masa tekrar müsait olsun
         if (status == OrderStatus.Completed || status == OrderStatus.Cancelled)
@@ -112,6 +121,8 @@ public class OrderService : IOrderService
                 table.Status = TableStatus.Available;
                 await _tableRepository.UpdateAsync(table);
             }
+
+            await _qrSessionRepository.RotateSessionAsync(order.TableId, restaurantId);
         }
 
         var updated = await _orderRepository.UpdateAsync(order);
