@@ -26,6 +26,7 @@ public class AuthService : IAuthService
 
     public async Task<AuthResponseDto> LoginAsync(LoginRequest request)
     {
+
         var user = await _authRepository.GetUserByEmailAsync(request.Email)
             ?? throw new UnauthorizedAccessException("Geçersiz email veya şifre.");
 
