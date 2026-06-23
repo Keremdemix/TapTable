@@ -1,0 +1,37 @@
+name: tap_table_staff
+description: "A new Flutter project."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management
+  flutter_riverpod: ^3.3.2
+
+  # Networking
+  dio: ^5.4.3
+
+  # Token saklama
+  flutter_secure_storage: ^10.3.1
+
+  # JWT decode (role/restaurantId claim okumak için)
+  jwt_decoder: ^2.0.1
+
+  # Model serialization
+  freezed_annotation: ^3.1.0
+  json_annotation: ^4.9.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  build_runner: ^2.4.11
+  freezed: ^3.2.5
+  json_serializable: ^6.8.0
+
+flutter:
+  uses-material-design: true
