@@ -120,7 +120,11 @@ class AdminTablesScreen extends ConsumerWidget {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            QrImageView(data: table.qrCodeUrl, size: 200),
+            SizedBox(                                    // ← EKLENDİ
+              width: 200,
+              height: 200,
+              child: QrImageView(data: table.qrCodeUrl, size: 200),
+            ),                                            // ← EKLENDİ
             const SizedBox(height: 12),
             Text(table.qrCodeUrl, style: const TextStyle(fontSize: 12), textAlign: TextAlign.center),
           ],
