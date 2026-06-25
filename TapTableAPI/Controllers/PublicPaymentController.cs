@@ -24,15 +24,4 @@ public class PublicPaymentController : ControllerBase
         var bill = await _paymentService.GetBillAsync(tableId, sessionKey);
         return Ok(bill);
     }
-
-    /// <summary>
-    /// Flutter'daki Stripe SDK için clientSecret döner
-    /// POST /api/public/payments/{tableId}/intent
-    /// </summary>
-    [HttpPost("{tableId:int}/intent")]
-    public async Task<IActionResult> CreateIntent(int tableId, [FromBody] CreatePaymentIntentRequestDto request)
-    {
-        var intent = await _paymentService.CreateStripeIntentAsync(tableId, request);
-        return Ok(intent);
-    }
 }

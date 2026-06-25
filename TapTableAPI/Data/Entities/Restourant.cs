@@ -7,9 +7,8 @@ public class Restaurant
     public string? Address { get; set; }
     public string? Phone { get; set; }
     public DateTime CreatedAt { get; set; }
-    public string? StripeAccountId { get; set; }
-    public bool StripeOnboardingCompleted { get; set; }
-    public bool StripeChargesEnabled { get; set; }
+    public string? IyzicoSubMerchantKey { get; set; }
+    public bool IyzicoSubMerchantApproved { get; set; }
 
     // Navigation
     public ICollection<User> Users { get; set; } = new List<User>();

@@ -21,12 +21,6 @@ public class PaymentRepository : IPaymentRepository
             .FirstOrDefaultAsync(p => p.Id == id && p.Order.Table.RestaurantId == restaurantId);
     }
 
-    public async Task<Payment?> GetByStripeIntentIdAsync(string intentId)
-    {
-        return await _context.Payments
-            .FirstOrDefaultAsync(p => p.StripePaymentIntentId == intentId);
-    }
-
     public async Task<IEnumerable<Payment>> GetByOrderIdAsync(int orderId, int restaurantId)
     {
         return await _context.Payments

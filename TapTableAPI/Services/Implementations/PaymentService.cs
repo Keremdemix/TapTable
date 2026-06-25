@@ -1,4 +1,3 @@
-using Stripe;
 using TapTable.Api.Data.Entities;
 using TapTable.Api.DTOs.Request.Payment;
 using TapTable.Api.DTOs.Response.Payment;
@@ -13,37 +12,29 @@ public class PaymentService : IPaymentService
     private readonly IOrderRepository _orderRepository;
     private readonly ITableRepository _tableRepository;
     private readonly IQrSessionRepository _qrSessionRepository;
-    private readonly string _publishableKey;
-    private readonly string _webhookSecret;
-    private readonly string _currency;
     private readonly IRestaurantRepository _restaurantRepository;
-    private readonly decimal _platformFeePercent;
 
     public PaymentService(
         IPaymentRepository paymentRepository,
         IOrderRepository orderRepository,
         ITableRepository tableRepository,
         IQrSessionRepository qrSessionRepository,
-        IRestaurantRepository restaurantRepository,
-        IConfiguration configuration)
+        IRestaurantRepository restaurantRepository,)
     {
         _paymentRepository = paymentRepository;
         _orderRepository = orderRepository;
         _tableRepository = tableRepository;
         _qrSessionRepository = qrSessionRepository;
         _restaurantRepository = restaurantRepository;
-        _publishableKey = configuration["Stripe:PublishableKey"] ?? string.Empty;
-        _webhookSecret = configuration["Stripe:WebhookSecret"] ?? string.Empty;
-        _currency = configuration["Stripe:Currency"] ?? "try";
-        _platformFeePercent = decimal.TryParse(configuration["Stripe:PlatformFeePercent"], out var fee) ? fee : 0;
+
     }
 
     // ── Garson — manuel ödeme ────────────────────────────────────────────
 
     public async Task<PaymentResponseDto> RecordManualPaymentAsync(int restaurantId, RecordManualPaymentRequestDto request)
     {
-        if (request.Method == TapTable.Api.Data.Entities.PaymentMethod.Stripe)
-            throw new ArgumentException("Manuel ödeme için Stripe seçilemez.");
+        if (request.Method == PaymentMethod.Iyzico)
+            throw new ArgumentException("Manuel ödeme için Iyzico seçilemez.");
 
         if (request.Amount <= 0)
             throw new ArgumentException("Tutar sıfırdan büyük olmalı.");
@@ -76,77 +67,9 @@ public class PaymentService : IPaymentService
         return payments.Select(MapToDto);
     }
 
-    // ── Müşteri — Stripe ─────────────────────────────────────────────────
+    // ── Müşteri — Iyzico ─────────────────────────────────────────────────
 
-    public async Task<PaymentIntentResponseDto> CreateStripeIntentAsync(int tableId, CreatePaymentIntentRequestDto request)
-    {
-        var table = await ValidateSessionAsync(tableId, request.SessionKey);
-
-        var restaurant = await _restaurantRepository.GetByIdAsync(table.RestaurantId)
-            ?? throw new KeyNotFoundException("Restoran bulunamadı.");
-
-        if (string.IsNullOrEmpty(restaurant.StripeAccountId) || !restaurant.StripeChargesEnabled)
-            throw new InvalidOperationException("Bu restoran henüz online ödeme almaya hazır değil.");
-
-        var order = await _orderRepository.GetActiveOrderByTableAsync(table.Id)
-            ?? throw new InvalidOperationException("Bu masada aktif sipariş bulunamadı.");
-
-        if (order.PaymentStatus == OrderPaymentStatus.Paid)
-            throw new InvalidOperationException("Bu sipariş zaten ödenmiş.");
-
-        var paidSoFar = await _paymentRepository.GetSucceededTotalAsync(order.Id);
-        var remaining = order.TotalPrice - paidSoFar;
-
-        if (remaining <= 0)
-            throw new InvalidOperationException("Ödenecek tutar kalmadı.");
-
-        var amountInCents = (long)(remaining * 100);
-        var applicationFee = _platformFeePercent > 0
-            ? (long)(amountInCents * _platformFeePercent / 100)
-            : (long?)null;
-
-        var options = new PaymentIntentCreateOptions
-        {
-            Amount = amountInCents,
-            Currency = _currency,
-            ApplicationFeeAmount = applicationFee,
-            TransferData = new PaymentIntentTransferDataOptions
-            {
-                Destination = restaurant.StripeAccountId
-            },
-            Metadata = new Dictionary<string, string>
-        {
-            { "orderId", order.Id.ToString() },
-            { "tableId", table.Id.ToString() }
-        },
-            AutomaticPaymentMethods = new PaymentIntentAutomaticPaymentMethodsOptions { Enabled = true }
-        };
-
-        var intentService = new PaymentIntentService();
-        var intent = await intentService.CreateAsync(options);
-
-        var payment = new Payment
-        {
-            OrderId = order.Id,
-            Amount = remaining,
-            Method = TapTable.Api.Data.Entities.PaymentMethod.Stripe,
-            SplitType = SplitType.Full,
-            Status = PaymentStatus.Pending,
-            StripePaymentIntentId = intent.Id,
-            CreatedAt = DateTime.UtcNow
-        };
-        var createdPayment = await _paymentRepository.CreateAsync(payment);
-
-        return new PaymentIntentResponseDto
-        {
-            PaymentId = createdPayment.Id,
-            ClientSecret = intent.ClientSecret,
-            PublishableKey = _publishableKey,
-            Amount = remaining,
-            Currency = _currency
-        };
-    }
-    public async Task<BillSummaryResponseDto> GetBillAsync(int tableId, string sessionKey)
+       public async Task<BillSummaryResponseDto> GetBillAsync(int tableId, string sessionKey)
     {
         var table = await ValidateSessionAsync(tableId, sessionKey);
 
@@ -172,55 +95,7 @@ public class PaymentService : IPaymentService
             PaymentStatus = order.PaymentStatus.ToString()
         };
     }
-
-    // ── Stripe → backend ─────────────────────────────────────────────────
-
-    public async Task HandleStripeWebhookAsync(string json, string stripeSignatureHeader)
-    {
-        Event stripeEvent;
-        try
-        {
-            stripeEvent = EventUtility.ConstructEvent(json, stripeSignatureHeader, _webhookSecret);
-        }
-        catch (StripeException)
-        {
-            throw new UnauthorizedAccessException("Geçersiz Stripe imzası.");
-        }
-
-        switch (stripeEvent.Type)
-        {
-            case "payment_intent.succeeded":
-                {
-                    var intent = stripeEvent.Data.Object as PaymentIntent;
-                    if (intent is null) break;
-
-                    var payment = await _paymentRepository.GetByStripeIntentIdAsync(intent.Id);
-                    if (payment is null || payment.Status == PaymentStatus.Succeeded) break; // idempotent
-
-                    payment.Status = PaymentStatus.Succeeded;
-                    await _paymentRepository.UpdateAsync(payment);
-
-                    var order = await _orderRepository.GetByIdInternalAsync(payment.OrderId);
-                    if (order is not null)
-                        await SettleOrderIfFullyPaidAsync(order);
-
-                    break;
-                }
-            case "payment_intent.payment_failed":
-                {
-                    var intent = stripeEvent.Data.Object as PaymentIntent;
-                    if (intent is null) break;
-
-                    var payment = await _paymentRepository.GetByStripeIntentIdAsync(intent.Id);
-                    if (payment is null) break;
-
-                    payment.Status = PaymentStatus.Failed;
-                    await _paymentRepository.UpdateAsync(payment);
-                    break;
-                }
-        }
-    }
-
+  
     // ── Helpers ──────────────────────────────────────────────────────────
 
     private async Task SettleOrderIfFullyPaidAsync(Order order)
@@ -271,7 +146,7 @@ public class PaymentService : IPaymentService
         Method = p.Method.ToString(),
         SplitType = p.SplitType.ToString(),
         Status = p.Status.ToString(),
-        StripePaymentIntentId = p.StripePaymentIntentId,
+        IyzicoPaymentId = p.IyzicoPaymentId,
         CreatedAt = p.CreatedAt
     };
 }
