@@ -115,11 +115,11 @@ class ApiClient {
     }
   }
   Future<List<dynamic>> getList(String path, {Map<String, dynamic>? query}) async {
-  try {
-    final res = await dio.get(path, queryParameters: query);
-    return res.data as List<dynamic>;
-  } on DioException catch (e) {
-    throw ApiException.fromDioError(e);
+    try {
+      final res = await dio.get(path, queryParameters: query);
+      return res.data as List<dynamic>;
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
   }
-}
 }
