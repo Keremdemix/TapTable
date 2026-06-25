@@ -19,7 +19,7 @@ public class PaymentService : IPaymentService
         IOrderRepository orderRepository,
         ITableRepository tableRepository,
         IQrSessionRepository qrSessionRepository,
-        IRestaurantRepository restaurantRepository,)
+        IRestaurantRepository restaurantRepository)
     {
         _paymentRepository = paymentRepository;
         _orderRepository = orderRepository;
