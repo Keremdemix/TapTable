@@ -10,8 +10,8 @@ public class RecordManualPaymentRequestDto
     public PaymentMethod Method { get; set; } // Cash veya Card
 }
 
-// Müşteri — Stripe ödeme başlatır
+/*
 public class CreatePaymentIntentRequestDto
 {
     public string SessionKey { get; set; } = null!;
-}
+}*/

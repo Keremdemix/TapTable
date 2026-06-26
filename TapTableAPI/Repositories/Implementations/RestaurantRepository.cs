@@ -19,11 +19,6 @@ public class RestaurantRepository : IRestaurantRepository
         return await _context.Restaurants.FirstOrDefaultAsync(r => r.Id == id);
     }
 
-    public async Task<Restaurant?> GetByStripeAccountIdAsync(string stripeAccountId)
-    {
-        return await _context.Restaurants.FirstOrDefaultAsync(r => r.StripeAccountId == stripeAccountId);
-    }
-
     public async Task<Restaurant> UpdateAsync(Restaurant restaurant)
     {
         _context.Restaurants.Update(restaurant);

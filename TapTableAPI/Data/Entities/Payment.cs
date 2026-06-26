@@ -7,7 +7,7 @@ public class Payment
     public decimal Amount { get; set; }
     public PaymentMethod Method { get; set; }
     public SplitType SplitType { get; set; } = SplitType.Full;
-    public string? StripePaymentIntentId { get; set; }
+    public string? IyzicoPaymentId { get; set; } 
     public PaymentStatus Status { get; set; } = PaymentStatus.Pending;
     public DateTime CreatedAt { get; set; }
 
@@ -17,8 +17,8 @@ public class Payment
 public enum PaymentMethod
 {
     Cash,
-    Card,   // garson POS cihazıyla aldı, sisteme manuel giriyor
-    Stripe  // online ödeme
+    Card,   // garson POS
+    Iyzico 
 }
 
 public enum SplitType

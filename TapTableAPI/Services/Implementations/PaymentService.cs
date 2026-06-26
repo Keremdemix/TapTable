@@ -1,9 +1,12 @@
-using Stripe;
+using Iyzipay.Model;
+using Iyzipay.Request;
 using TapTable.Api.Data.Entities;
 using TapTable.Api.DTOs.Request.Payment;
 using TapTable.Api.DTOs.Response.Payment;
+using TapTable.Api.Helpers;
 using TapTable.Api.Repositories.Interfaces;
 using TapTable.Api.Services.Interfaces;
+using PaymentEntity = TapTable.Api.Data.Entities.Payment;   // ← Iyzipay.Model.Payment ile çakışmayı önlüyor
 
 namespace TapTable.Api.Services.Implementations;
 
@@ -13,11 +16,8 @@ public class PaymentService : IPaymentService
     private readonly IOrderRepository _orderRepository;
     private readonly ITableRepository _tableRepository;
     private readonly IQrSessionRepository _qrSessionRepository;
-    private readonly string _publishableKey;
-    private readonly string _webhookSecret;
-    private readonly string _currency;
     private readonly IRestaurantRepository _restaurantRepository;
-    private readonly decimal _platformFeePercent;
+    private readonly IConfiguration _configuration;
 
     public PaymentService(
         IPaymentRepository paymentRepository,
@@ -32,18 +32,15 @@ public class PaymentService : IPaymentService
         _tableRepository = tableRepository;
         _qrSessionRepository = qrSessionRepository;
         _restaurantRepository = restaurantRepository;
-        _publishableKey = configuration["Stripe:PublishableKey"] ?? string.Empty;
-        _webhookSecret = configuration["Stripe:WebhookSecret"] ?? string.Empty;
-        _currency = configuration["Stripe:Currency"] ?? "try";
-        _platformFeePercent = decimal.TryParse(configuration["Stripe:PlatformFeePercent"], out var fee) ? fee : 0;
+        _configuration = configuration;
     }
 
     // ── Garson — manuel ödeme ────────────────────────────────────────────
 
     public async Task<PaymentResponseDto> RecordManualPaymentAsync(int restaurantId, RecordManualPaymentRequestDto request)
     {
-        if (request.Method == TapTable.Api.Data.Entities.PaymentMethod.Stripe)
-            throw new ArgumentException("Manuel ödeme için Stripe seçilemez.");
+        if (request.Method == PaymentMethod.Iyzico)
+            throw new ArgumentException("Manuel ödeme için Iyzico seçilemez.");
 
         if (request.Amount <= 0)
             throw new ArgumentException("Tutar sıfırdan büyük olmalı.");
@@ -54,13 +51,13 @@ public class PaymentService : IPaymentService
         if (order.PaymentStatus == OrderPaymentStatus.Paid)
             throw new InvalidOperationException("Bu sipariş zaten ödenmiş.");
 
-        var payment = new Payment
+        var payment = new PaymentEntity
         {
             OrderId = order.Id,
             Amount = request.Amount,
             Method = request.Method,
             SplitType = SplitType.Full,
-            Status = PaymentStatus.Succeeded, // garson zaten parayı fiziksel olarak aldı
+            Status = PaymentStatus.Succeeded,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -76,76 +73,8 @@ public class PaymentService : IPaymentService
         return payments.Select(MapToDto);
     }
 
-    // ── Müşteri — Stripe ─────────────────────────────────────────────────
+    // ── Müşteri — Hesap görüntüleme ──────────────────────────────────────
 
-    public async Task<PaymentIntentResponseDto> CreateStripeIntentAsync(int tableId, CreatePaymentIntentRequestDto request)
-    {
-        var table = await ValidateSessionAsync(tableId, request.SessionKey);
-
-        var restaurant = await _restaurantRepository.GetByIdAsync(table.RestaurantId)
-            ?? throw new KeyNotFoundException("Restoran bulunamadı.");
-
-        if (string.IsNullOrEmpty(restaurant.StripeAccountId) || !restaurant.StripeChargesEnabled)
-            throw new InvalidOperationException("Bu restoran henüz online ödeme almaya hazır değil.");
-
-        var order = await _orderRepository.GetActiveOrderByTableAsync(table.Id)
-            ?? throw new InvalidOperationException("Bu masada aktif sipariş bulunamadı.");
-
-        if (order.PaymentStatus == OrderPaymentStatus.Paid)
-            throw new InvalidOperationException("Bu sipariş zaten ödenmiş.");
-
-        var paidSoFar = await _paymentRepository.GetSucceededTotalAsync(order.Id);
-        var remaining = order.TotalPrice - paidSoFar;
-
-        if (remaining <= 0)
-            throw new InvalidOperationException("Ödenecek tutar kalmadı.");
-
-        var amountInCents = (long)(remaining * 100);
-        var applicationFee = _platformFeePercent > 0
-            ? (long)(amountInCents * _platformFeePercent / 100)
-            : (long?)null;
-
-        var options = new PaymentIntentCreateOptions
-        {
-            Amount = amountInCents,
-            Currency = _currency,
-            ApplicationFeeAmount = applicationFee,
-            TransferData = new PaymentIntentTransferDataOptions
-            {
-                Destination = restaurant.StripeAccountId
-            },
-            Metadata = new Dictionary<string, string>
-        {
-            { "orderId", order.Id.ToString() },
-            { "tableId", table.Id.ToString() }
-        },
-            AutomaticPaymentMethods = new PaymentIntentAutomaticPaymentMethodsOptions { Enabled = true }
-        };
-
-        var intentService = new PaymentIntentService();
-        var intent = await intentService.CreateAsync(options);
-
-        var payment = new Payment
-        {
-            OrderId = order.Id,
-            Amount = remaining,
-            Method = TapTable.Api.Data.Entities.PaymentMethod.Stripe,
-            SplitType = SplitType.Full,
-            Status = PaymentStatus.Pending,
-            StripePaymentIntentId = intent.Id,
-            CreatedAt = DateTime.UtcNow
-        };
-        var createdPayment = await _paymentRepository.CreateAsync(payment);
-
-        return new PaymentIntentResponseDto
-        {
-            PaymentId = createdPayment.Id,
-            ClientSecret = intent.ClientSecret,
-            PublishableKey = _publishableKey,
-            Amount = remaining,
-            Currency = _currency
-        };
-    }
     public async Task<BillSummaryResponseDto> GetBillAsync(int tableId, string sessionKey)
     {
         var table = await ValidateSessionAsync(tableId, sessionKey);
@@ -173,52 +102,134 @@ public class PaymentService : IPaymentService
         };
     }
 
-    // ── Stripe → backend ─────────────────────────────────────────────────
+    // ── Müşteri — iyzico Checkout Form ────────────────────────────────────
 
-    public async Task HandleStripeWebhookAsync(string json, string stripeSignatureHeader)
+    public async Task<IyzicoCheckoutResponseDto> CreateIyzicoCheckoutAsync(
+        int tableId, InitiateIyzicoPaymentRequestDto request, string buyerIp)
     {
-        Event stripeEvent;
-        try
-        {
-            stripeEvent = EventUtility.ConstructEvent(json, stripeSignatureHeader, _webhookSecret);
-        }
-        catch (StripeException)
-        {
-            throw new UnauthorizedAccessException("Geçersiz Stripe imzası.");
-        }
+        var table = await ValidateSessionAsync(tableId, request.SessionKey);
 
-        switch (stripeEvent.Type)
+        var restaurant = await _restaurantRepository.GetByIdAsync(table.RestaurantId)
+            ?? throw new KeyNotFoundException("Restoran bulunamadı.");
+
+        if (string.IsNullOrEmpty(restaurant.IyzicoSubMerchantKey) || !restaurant.IsIyzicoApproved)
+            throw new InvalidOperationException("Bu restoran henüz online ödeme almaya hazır değil.");
+
+        var order = await _orderRepository.GetActiveOrderByTableAsync(table.Id)
+            ?? throw new InvalidOperationException("Bu masada aktif sipariş bulunamadı.");
+
+        if (order.PaymentStatus == OrderPaymentStatus.Paid)
+            throw new InvalidOperationException("Bu sipariş zaten ödenmiş.");
+
+        var paidSoFar = await _paymentRepository.GetSucceededTotalAsync(order.Id);
+        var remaining = order.TotalPrice - paidSoFar;
+
+        if (remaining <= 0)
+            throw new InvalidOperationException("Ödenecek tutar kalmadı.");
+
+        var priceText = remaining.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+        var callbackBase = _configuration["Iyzico:CallbackBaseUrl"]?.TrimEnd('/') ?? string.Empty;
+        var options = IyzicoOptionsFactory.Build(_configuration);
+
+        var initRequest = new CreateCheckoutFormInitializeRequest
         {
-            case "payment_intent.succeeded":
+            Locale = Locale.TR.ToString(),
+            ConversationId = Guid.NewGuid().ToString(),
+            Price = priceText,
+            PaidPrice = priceText,
+            Currency = Currency.TRY.ToString(),
+            BasketId = $"order-{order.Id}",
+            PaymentGroup = PaymentGroup.PRODUCT.ToString(),
+            CallbackUrl = $"{callbackBase}/api/public/payments/iyzico-callback",
+            Buyer = new Buyer
+            {
+                Id = $"guest-{table.Id}-{DateTime.UtcNow.Ticks}",
+                Name = request.BuyerName,
+                Surname = request.BuyerSurname,
+                GsmNumber = request.BuyerGsmNumber,
+                Email = string.IsNullOrWhiteSpace(request.BuyerEmail) ? "guest@taptable.com" : request.BuyerEmail,
+                RegistrationAddress = restaurant.Address ?? "Adres belirtilmedi",
+                City = "Istanbul",
+                Country = "Turkey",
+                Ip = buyerIp
+            },
+            BasketItems = new List<BasketItem>
+            {
+                new BasketItem
                 {
-                    var intent = stripeEvent.Data.Object as PaymentIntent;
-                    if (intent is null) break;
-
-                    var payment = await _paymentRepository.GetByStripeIntentIdAsync(intent.Id);
-                    if (payment is null || payment.Status == PaymentStatus.Succeeded) break; // idempotent
-
-                    payment.Status = PaymentStatus.Succeeded;
-                    await _paymentRepository.UpdateAsync(payment);
-
-                    var order = await _orderRepository.GetByIdInternalAsync(payment.OrderId);
-                    if (order is not null)
-                        await SettleOrderIfFullyPaidAsync(order);
-
-                    break;
+                    Id = $"order-{order.Id}-item",
+                    Name = $"Masa {table.TableNumber} Siparişi",
+                    Category1 = "Restoran",
+                    ItemType = BasketItemType.VIRTUAL.ToString(),
+                    Price = priceText,
+                    SubMerchantKey = restaurant.IyzicoSubMerchantKey,
+                    SubMerchantPrice = priceText
                 }
-            case "payment_intent.payment_failed":
-                {
-                    var intent = stripeEvent.Data.Object as PaymentIntent;
-                    if (intent is null) break;
+            }
+        };
 
-                    var payment = await _paymentRepository.GetByStripeIntentIdAsync(intent.Id);
-                    if (payment is null) break;
+        // ⚠️ await eklendi
+        var result = await CheckoutFormInitialize.Create(initRequest, options);
+        if (result.Status != "success")
+            throw new InvalidOperationException($"iyzico ödeme başlatma hatası: {result.ErrorMessage}");
 
-                    payment.Status = PaymentStatus.Failed;
-                    await _paymentRepository.UpdateAsync(payment);
-                    break;
-                }
+        var payment = new PaymentEntity
+        {
+            OrderId = order.Id,
+            Amount = remaining,
+            Method = PaymentMethod.Iyzico,
+            SplitType = SplitType.Full,
+            Status = PaymentStatus.Pending,
+            IyzicoPaymentId = result.Token,
+            CreatedAt = DateTime.UtcNow
+        };
+        await _paymentRepository.CreateAsync(payment);
+
+        return new IyzicoCheckoutResponseDto
+        {
+            PaymentId = payment.Id,
+            Token = result.Token,
+            PaymentPageUrl = result.PaymentPageUrl
+        };
+    }
+
+    // ── iyzico → backend callback ────────────────────────────────────────
+
+    public async Task<bool> HandleIyzicoCallbackAsync(string token)
+    {
+        var payment = await _paymentRepository.GetByIyzicoTokenAsync(token)
+            ?? throw new KeyNotFoundException("Ödeme bulunamadı.");
+
+        if (payment.Status == PaymentStatus.Succeeded)
+            return true;
+
+        var options = IyzicoOptionsFactory.Build(_configuration);
+        var retrieveRequest = new RetrieveCheckoutFormRequest
+        {
+            Locale = Locale.TR.ToString(),
+            ConversationId = Guid.NewGuid().ToString(),
+            Token = token
+        };
+
+        // ⚠️ await eklendi
+        var result = await CheckoutForm.Retrieve(retrieveRequest, options);
+
+        if (result.Status == "success" && result.PaymentStatus == "SUCCESS")
+        {
+            payment.Status = PaymentStatus.Succeeded;
+            payment.IyzicoPaymentId = result.PaymentId;
+            await _paymentRepository.UpdateAsync(payment);
+
+            var order = await _orderRepository.GetByIdInternalAsync(payment.OrderId);
+            if (order is not null)
+                await SettleOrderIfFullyPaidAsync(order);
+
+            return true;
         }
+
+        payment.Status = PaymentStatus.Failed;
+        await _paymentRepository.UpdateAsync(payment);
+        return false;
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────
@@ -241,6 +252,8 @@ public class PaymentService : IPaymentService
                 table.Status = TableStatus.Available;
                 await _tableRepository.UpdateAsync(table);
             }
+
+            await _qrSessionRepository.RotateSessionAsync(order.TableId, order.Table.RestaurantId);
         }
 
         await _orderRepository.UpdateAsync(order);
@@ -263,7 +276,7 @@ public class PaymentService : IPaymentService
         return table;
     }
 
-    private static PaymentResponseDto MapToDto(Payment p) => new()
+    private static PaymentResponseDto MapToDto(PaymentEntity p) => new()
     {
         Id = p.Id,
         OrderId = p.OrderId,
@@ -271,7 +284,7 @@ public class PaymentService : IPaymentService
         Method = p.Method.ToString(),
         SplitType = p.SplitType.ToString(),
         Status = p.Status.ToString(),
-        StripePaymentIntentId = p.StripePaymentIntentId,
+        IyzicoPaymentId = p.IyzicoPaymentId,
         CreatedAt = p.CreatedAt
     };
 }

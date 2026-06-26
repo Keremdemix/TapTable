@@ -7,11 +7,12 @@ public class Restaurant
     public string? Address { get; set; }
     public string? Phone { get; set; }
     public DateTime CreatedAt { get; set; }
-    public string? StripeAccountId { get; set; }
-    public bool StripeOnboardingCompleted { get; set; }
-    public bool StripeChargesEnabled { get; set; }
 
-    // Navigation
+    // ── iyzico Pazaryeri (Marketplace) ──────────────────────────────────
+    public string? IyzicoSubMerchantKey { get; set; }         // iyzico'dan dönen, ödeme bölüştürmede kullanılan anahtar
+    public string? IyzicoSubMerchantExternalId { get; set; }  // bizim ürettiğimiz, sorgu/güncelleme için kullanılan dış ID
+    public bool IsIyzicoApproved { get; set; }
+
     public ICollection<User> Users { get; set; } = new List<User>();
     public ICollection<RestaurantTable> Tables { get; set; } = new List<RestaurantTable>();
     public ICollection<Category> Categories { get; set; } = new List<Category>();

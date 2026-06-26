@@ -8,18 +8,10 @@ public class PaymentResponseDto
     public string Method { get; set; } = null!;
     public string SplitType { get; set; } = null!;
     public string Status { get; set; } = null!;
-    public string? StripePaymentIntentId { get; set; }
+    public string? IyzicoPaymentId { get; set; } 
     public DateTime CreatedAt { get; set; }
 }
 
-public class PaymentIntentResponseDto
-{
-    public int PaymentId { get; set; }
-    public string ClientSecret { get; set; } = null!;
-    public string PublishableKey { get; set; } = null!;
-    public decimal Amount { get; set; }
-    public string Currency { get; set; } = null!;
-}
 
 public class BillItemDto
 {

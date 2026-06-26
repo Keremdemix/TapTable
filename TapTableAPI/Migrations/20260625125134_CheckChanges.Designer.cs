@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using TapTable.Api.Data;
 
@@ -11,9 +12,11 @@ using TapTable.Api.Data;
 namespace TapTableAPI.Migrations
 {
     [DbContext(typeof(TapTableDbContext))]
-    partial class TapTableDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260625125134_CheckChanges")]
+    partial class CheckChanges
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -227,8 +230,7 @@ namespace TapTableAPI.Migrations
                         .HasDefaultValueSql("GETDATE()");
 
                     b.Property<string>("IyzicoPaymentId")
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Method")
                         .IsRequired()
@@ -312,18 +314,11 @@ namespace TapTableAPI.Migrations
                         .HasColumnType("datetime2")
                         .HasDefaultValueSql("GETDATE()");
 
-                    b.Property<bool>("IsIyzicoApproved")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(false);
-
-                    b.Property<string>("IyzicoSubMerchantExternalId")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
+                    b.Property<bool>("IyzicoSubMerchantApproved")
+                        .HasColumnType("bit");
 
                     b.Property<string>("IyzicoSubMerchantKey")
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Name")
                         .IsRequired()

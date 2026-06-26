@@ -131,9 +131,8 @@ builder.Services.AddScoped<IQrSessionService, QrSessionService>();
 builder.Services.AddScoped<IMenuService, MenuService>();
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
-builder.Services.AddScoped<IStripeConnectService, StripeConnectService>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();
-
+builder.Services.AddScoped<IIyzicoSubMerchantService, IyzicoSubMerchantService>();
 //
 // ── Build ────────────────────────────────────────────────────────────────────────
 //
