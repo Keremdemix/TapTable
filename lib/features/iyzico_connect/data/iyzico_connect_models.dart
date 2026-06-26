@@ -8,27 +8,44 @@ class IyzicoSubMerchantStatusDto with _$IyzicoSubMerchantStatusDto {
   const factory IyzicoSubMerchantStatusDto({
     required bool hasSubMerchant,
     required bool isApproved,
-    String? subMerchantKey,
   }) = _IyzicoSubMerchantStatusDto;
 
   factory IyzicoSubMerchantStatusDto.fromJson(Map<String, dynamic> json) =>
       _$IyzicoSubMerchantStatusDtoFromJson(json);
 }
 
-@freezed
-class RegisterSubMerchantRequestDto with _$RegisterSubMerchantRequestDto {
-  const factory RegisterSubMerchantRequestDto({
-    required String contactName,
-    required String contactSurname,
-    required String email,
-    required String gsmNumber,
-    required String iban,
-    required String legalCompanyTitle,
-    required String taxOffice,
-    required String taxNumber,
-    required String address,
-  }) = _RegisterSubMerchantRequestDto;
+class RegisterSubMerchantRequestDto {
+  final String contactName;
+  final String contactSurname;
+  final String email;
+  final String gsmNumber;
+  final String iban;
+  final String legalCompanyTitle;
+  final String taxOffice;
+  final String taxNumber;
+  final String address;
 
-  factory RegisterSubMerchantRequestDto.fromJson(Map<String, dynamic> json) =>
-      _$RegisterSubMerchantRequestDtoFromJson(json);
+  RegisterSubMerchantRequestDto({
+    required this.contactName,
+    required this.contactSurname,
+    required this.email,
+    required this.gsmNumber,
+    required this.iban,
+    required this.legalCompanyTitle,
+    required this.taxOffice,
+    required this.taxNumber,
+    required this.address,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'contactName': contactName,
+        'contactSurname': contactSurname,
+        'email': email,
+        'gsmNumber': gsmNumber,
+        'iban': iban,
+        'legalCompanyTitle': legalCompanyTitle,
+        'taxOffice': taxOffice,
+        'taxNumber': taxNumber,
+        'address': address,
+      };
 }

@@ -10,11 +10,7 @@ class IyzicoConnectRepository {
     return IyzicoSubMerchantStatusDto.fromJson(json);
   }
 
-  Future<IyzicoSubMerchantStatusDto> register(RegisterSubMerchantRequestDto dto) async {
-  final json = await _apiClient.post(
-    '/iyzico-connect/register',
-    data: dto.toJson(),
-  );
-  return IyzicoSubMerchantStatusDto.fromJson(json);
-}
+  Future<void> register(RegisterSubMerchantRequestDto dto) async {
+    await _apiClient.post('/iyzico-connect/register', data: dto.toJson());
+  }
 }

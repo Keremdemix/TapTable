@@ -33,14 +33,6 @@ class AdminHomeScreen extends ConsumerWidget {
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminTablesScreen())),
           ),
           _AdminMenuTile(
-            icon: Icons.payment,  
-            title: 'Ödeme Ayarları',
-            subtitle: 'Stripe Connect kurulumu',
-            onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('İleride eklenecek.')),
-            ),
-          ),
-          _AdminMenuTile(
             icon: Icons.restaurant_menu,
             title: 'Menü',
             subtitle: 'Kategori ve ürün yönetimi',
