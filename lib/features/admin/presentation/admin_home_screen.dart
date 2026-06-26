@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tap_table_staff/features/iyzico_connect/presentation/admin_iyzico_connect_screen.dart';
 import '../../auth/application/auth_providers.dart';
 import '../../tables/presentation/admin_tables_screen.dart';
 import '../../menu/presentation/admin_menu_screen.dart';
@@ -44,6 +45,12 @@ class AdminHomeScreen extends ConsumerWidget {
             title: 'Menü',
             subtitle: 'Kategori ve ürün yönetimi',
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminMenuScreen())),
+          ),
+          _AdminMenuTile(
+              icon: Icons.payment,
+              title: 'Ödeme Ayarları',
+            subtitle: 'Stripe Connect kurulumu',
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminIyzicoConnectScreen())),
           ),
         ],
       ),
