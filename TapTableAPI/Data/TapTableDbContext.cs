@@ -40,6 +40,9 @@ public class TapTableDbContext : DbContext
             e.Property(x => x.Phone).HasMaxLength(50);
             e.Property(x => x.CreatedAt).HasDefaultValueSql("GETDATE()");
 
+            e.Property(x => x.IyzicoSubMerchantKey).HasMaxLength(200);
+            e.Property(x => x.IyzicoSubMerchantExternalId).HasMaxLength(100);
+            e.Property(x => x.IsIyzicoApproved).HasDefaultValue(false);
         });
 
         // ── User ──────────────────────────────────────────────────────────────
@@ -202,22 +205,10 @@ public class TapTableDbContext : DbContext
         {
             e.HasKey(x => x.Id);
             e.Property(x => x.Amount).HasColumnType("decimal(18,2)");
-
-            e.Property(x => x.Method)
-             .HasConversion<string>()
-             .HasMaxLength(30);
-
-            e.Property(x => x.SplitType)
-             .HasConversion<string>()
-             .HasMaxLength(20)
-             .HasDefaultValue(SplitType.Full);
-
-
-            e.Property(x => x.Status)
-             .HasConversion<string>()
-             .HasMaxLength(50)
-             .HasDefaultValue(PaymentStatus.Pending);
-
+            e.Property(x => x.Method).HasConversion<string>().HasMaxLength(30);
+            e.Property(x => x.SplitType).HasConversion<string>().HasMaxLength(20).HasDefaultValue(SplitType.Full);
+            e.Property(x => x.IyzicoPaymentId).HasMaxLength(200);   // ← EKLENDİ
+            e.Property(x => x.Status).HasConversion<string>().HasMaxLength(50).HasDefaultValue(PaymentStatus.Pending);
             e.Property(x => x.CreatedAt).HasDefaultValueSql("GETDATE()");
 
             e.HasOne(x => x.Order)

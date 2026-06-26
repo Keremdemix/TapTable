@@ -49,4 +49,8 @@ public class PaymentRepository : IPaymentRepository
         await _context.SaveChangesAsync();
         return payment;
     }
+    public async Task<Payment?> GetByIyzicoTokenAsync(string token)
+    {
+        return await _context.Payments.FirstOrDefaultAsync(p => p.IyzicoPaymentId == token);
+    }
 }

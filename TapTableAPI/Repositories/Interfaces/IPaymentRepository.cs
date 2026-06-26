@@ -9,4 +9,5 @@ public interface IPaymentRepository
     Task<decimal> GetSucceededTotalAsync(int orderId);
     Task<Payment> CreateAsync(Payment payment);
     Task<Payment> UpdateAsync(Payment payment);
+    Task<Payment?> GetByIyzicoTokenAsync(string token);
 }

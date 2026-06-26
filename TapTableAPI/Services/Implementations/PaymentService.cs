@@ -1,8 +1,12 @@
+using Iyzipay.Model;
+using Iyzipay.Request;
 using TapTable.Api.Data.Entities;
 using TapTable.Api.DTOs.Request.Payment;
 using TapTable.Api.DTOs.Response.Payment;
+using TapTable.Api.Helpers;
 using TapTable.Api.Repositories.Interfaces;
 using TapTable.Api.Services.Interfaces;
+using PaymentEntity = TapTable.Api.Data.Entities.Payment;   // ← Iyzipay.Model.Payment ile çakışmayı önlüyor
 
 namespace TapTable.Api.Services.Implementations;
 
@@ -13,20 +17,22 @@ public class PaymentService : IPaymentService
     private readonly ITableRepository _tableRepository;
     private readonly IQrSessionRepository _qrSessionRepository;
     private readonly IRestaurantRepository _restaurantRepository;
+    private readonly IConfiguration _configuration;
 
     public PaymentService(
         IPaymentRepository paymentRepository,
         IOrderRepository orderRepository,
         ITableRepository tableRepository,
         IQrSessionRepository qrSessionRepository,
-        IRestaurantRepository restaurantRepository)
+        IRestaurantRepository restaurantRepository,
+        IConfiguration configuration)
     {
         _paymentRepository = paymentRepository;
         _orderRepository = orderRepository;
         _tableRepository = tableRepository;
         _qrSessionRepository = qrSessionRepository;
         _restaurantRepository = restaurantRepository;
-
+        _configuration = configuration;
     }
 
     // ── Garson — manuel ödeme ────────────────────────────────────────────
@@ -45,13 +51,13 @@ public class PaymentService : IPaymentService
         if (order.PaymentStatus == OrderPaymentStatus.Paid)
             throw new InvalidOperationException("Bu sipariş zaten ödenmiş.");
 
-        var payment = new Payment
+        var payment = new PaymentEntity
         {
             OrderId = order.Id,
             Amount = request.Amount,
             Method = request.Method,
             SplitType = SplitType.Full,
-            Status = PaymentStatus.Succeeded, // garson zaten parayı fiziksel olarak aldı
+            Status = PaymentStatus.Succeeded,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -67,9 +73,9 @@ public class PaymentService : IPaymentService
         return payments.Select(MapToDto);
     }
 
-    // ── Müşteri — Iyzico ─────────────────────────────────────────────────
+    // ── Müşteri — Hesap görüntüleme ──────────────────────────────────────
 
-       public async Task<BillSummaryResponseDto> GetBillAsync(int tableId, string sessionKey)
+    public async Task<BillSummaryResponseDto> GetBillAsync(int tableId, string sessionKey)
     {
         var table = await ValidateSessionAsync(tableId, sessionKey);
 
@@ -95,7 +101,137 @@ public class PaymentService : IPaymentService
             PaymentStatus = order.PaymentStatus.ToString()
         };
     }
-  
+
+    // ── Müşteri — iyzico Checkout Form ────────────────────────────────────
+
+    public async Task<IyzicoCheckoutResponseDto> CreateIyzicoCheckoutAsync(
+        int tableId, InitiateIyzicoPaymentRequestDto request, string buyerIp)
+    {
+        var table = await ValidateSessionAsync(tableId, request.SessionKey);
+
+        var restaurant = await _restaurantRepository.GetByIdAsync(table.RestaurantId)
+            ?? throw new KeyNotFoundException("Restoran bulunamadı.");
+
+        if (string.IsNullOrEmpty(restaurant.IyzicoSubMerchantKey) || !restaurant.IsIyzicoApproved)
+            throw new InvalidOperationException("Bu restoran henüz online ödeme almaya hazır değil.");
+
+        var order = await _orderRepository.GetActiveOrderByTableAsync(table.Id)
+            ?? throw new InvalidOperationException("Bu masada aktif sipariş bulunamadı.");
+
+        if (order.PaymentStatus == OrderPaymentStatus.Paid)
+            throw new InvalidOperationException("Bu sipariş zaten ödenmiş.");
+
+        var paidSoFar = await _paymentRepository.GetSucceededTotalAsync(order.Id);
+        var remaining = order.TotalPrice - paidSoFar;
+
+        if (remaining <= 0)
+            throw new InvalidOperationException("Ödenecek tutar kalmadı.");
+
+        var priceText = remaining.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+        var callbackBase = _configuration["Iyzico:CallbackBaseUrl"]?.TrimEnd('/') ?? string.Empty;
+        var options = IyzicoOptionsFactory.Build(_configuration);
+
+        var initRequest = new CreateCheckoutFormInitializeRequest
+        {
+            Locale = Locale.TR.ToString(),
+            ConversationId = Guid.NewGuid().ToString(),
+            Price = priceText,
+            PaidPrice = priceText,
+            Currency = Currency.TRY.ToString(),
+            BasketId = $"order-{order.Id}",
+            PaymentGroup = PaymentGroup.PRODUCT.ToString(),
+            CallbackUrl = $"{callbackBase}/api/public/payments/iyzico-callback",
+            Buyer = new Buyer
+            {
+                Id = $"guest-{table.Id}-{DateTime.UtcNow.Ticks}",
+                Name = request.BuyerName,
+                Surname = request.BuyerSurname,
+                GsmNumber = request.BuyerGsmNumber,
+                Email = string.IsNullOrWhiteSpace(request.BuyerEmail) ? "guest@taptable.com" : request.BuyerEmail,
+                RegistrationAddress = restaurant.Address ?? "Adres belirtilmedi",
+                City = "Istanbul",
+                Country = "Turkey",
+                Ip = buyerIp
+            },
+            BasketItems = new List<BasketItem>
+            {
+                new BasketItem
+                {
+                    Id = $"order-{order.Id}-item",
+                    Name = $"Masa {table.TableNumber} Siparişi",
+                    Category1 = "Restoran",
+                    ItemType = BasketItemType.VIRTUAL.ToString(),
+                    Price = priceText,
+                    SubMerchantKey = restaurant.IyzicoSubMerchantKey,
+                    SubMerchantPrice = priceText
+                }
+            }
+        };
+
+        // ⚠️ await eklendi
+        var result = await CheckoutFormInitialize.Create(initRequest, options);
+        if (result.Status != "success")
+            throw new InvalidOperationException($"iyzico ödeme başlatma hatası: {result.ErrorMessage}");
+
+        var payment = new PaymentEntity
+        {
+            OrderId = order.Id,
+            Amount = remaining,
+            Method = PaymentMethod.Iyzico,
+            SplitType = SplitType.Full,
+            Status = PaymentStatus.Pending,
+            IyzicoPaymentId = result.Token,
+            CreatedAt = DateTime.UtcNow
+        };
+        await _paymentRepository.CreateAsync(payment);
+
+        return new IyzicoCheckoutResponseDto
+        {
+            PaymentId = payment.Id,
+            Token = result.Token,
+            PaymentPageUrl = result.PaymentPageUrl
+        };
+    }
+
+    // ── iyzico → backend callback ────────────────────────────────────────
+
+    public async Task<bool> HandleIyzicoCallbackAsync(string token)
+    {
+        var payment = await _paymentRepository.GetByIyzicoTokenAsync(token)
+            ?? throw new KeyNotFoundException("Ödeme bulunamadı.");
+
+        if (payment.Status == PaymentStatus.Succeeded)
+            return true;
+
+        var options = IyzicoOptionsFactory.Build(_configuration);
+        var retrieveRequest = new RetrieveCheckoutFormRequest
+        {
+            Locale = Locale.TR.ToString(),
+            ConversationId = Guid.NewGuid().ToString(),
+            Token = token
+        };
+
+        // ⚠️ await eklendi
+        var result = await CheckoutForm.Retrieve(retrieveRequest, options);
+
+        if (result.Status == "success" && result.PaymentStatus == "SUCCESS")
+        {
+            payment.Status = PaymentStatus.Succeeded;
+            payment.IyzicoPaymentId = result.PaymentId;
+            await _paymentRepository.UpdateAsync(payment);
+
+            var order = await _orderRepository.GetByIdInternalAsync(payment.OrderId);
+            if (order is not null)
+                await SettleOrderIfFullyPaidAsync(order);
+
+            return true;
+        }
+
+        payment.Status = PaymentStatus.Failed;
+        await _paymentRepository.UpdateAsync(payment);
+        return false;
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────
 
     private async Task SettleOrderIfFullyPaidAsync(Order order)
@@ -116,6 +252,8 @@ public class PaymentService : IPaymentService
                 table.Status = TableStatus.Available;
                 await _tableRepository.UpdateAsync(table);
             }
+
+            await _qrSessionRepository.RotateSessionAsync(order.TableId, order.Table.RestaurantId);
         }
 
         await _orderRepository.UpdateAsync(order);
@@ -138,7 +276,7 @@ public class PaymentService : IPaymentService
         return table;
     }
 
-    private static PaymentResponseDto MapToDto(Payment p) => new()
+    private static PaymentResponseDto MapToDto(PaymentEntity p) => new()
     {
         Id = p.Id,
         OrderId = p.OrderId,
