@@ -2,22 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../auth/application/auth_providers.dart';
 import '../../tables/application/table_providers.dart';
-import '../../tables/data/table_models.dart';
+import '../../tables/presentation/table_shape_widget.dart';
 import 'waiter_table_detail_screen.dart';
+
+const double _canvasWidth = 1200;
+const double _canvasHeight = 900;
 
 class WaiterHomeScreen extends ConsumerWidget {
   const WaiterHomeScreen({super.key});
 
-  (String, Color) _statusInfo(TableStatus status) => switch (status) {
-        TableStatus.available => ('Müsait', Colors.green),
-        TableStatus.occupied => ('Dolu', Colors.orange),
-        TableStatus.reserved => ('Rezerve', Colors.blue),
-        TableStatus.outOfService => ('Kapalı', Colors.grey),
-      };
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tablesAsync = ref.watch(tablesProvider);
+    final layoutAsync = ref.watch(tableLayoutProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -33,54 +29,51 @@ class WaiterHomeScreen extends ConsumerWidget {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(tablesProvider),
-        child: tablesAsync.when(
+        onRefresh: () async => ref.invalidate(tableLayoutProvider),
+        child: layoutAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (err, _) => Center(child: Text('Hata: $err')),
-          data: (tables) {
-            if (tables.isEmpty) return const Center(child: Text('Henüz masa eklenmedi.'));
+          data: (layouts) {
+            if (layouts.isEmpty) return const Center(child: Text('Henüz masa eklenmedi.'));
 
-            return GridView.builder(
-              padding: const EdgeInsets.all(12),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                childAspectRatio: 1.3,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-              ),
-              itemCount: tables.length,
-              itemBuilder: (context, index) {
-                final table = tables[index];
-                final (label, color) = _statusInfo(table.status);
-
-                return InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: () async {
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => WaiterTableDetailScreen(table: table)),
+            return InteractiveViewer(
+              minScale: 0.4,
+              maxScale: 2.0,
+              constrained: false,
+              child: SizedBox(
+                width: _canvasWidth,
+                height: _canvasHeight,
+                child: Stack(
+                  children: layouts.map((t) {
+                    return Positioned(
+                      left: t.positionX.toDouble(),
+                      top: t.positionY.toDouble(),
+                      child: GestureDetector(
+                        onTap: () async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => WaiterTableDetailScreen(
+                                tableId: t.tableId,
+                                tableNumber: t.tableNumber,
+                              ),
+                            ),
+                          );
+                          ref.invalidate(tableLayoutProvider);
+                        },
+                        child: TableShapeWidget(
+                          tableNumber: t.tableNumber,
+                          capacity: t.capacity,
+                          status: t.status,
+                          width: t.width.toDouble(),
+                          height: t.height.toDouble(),
+                          shape: t.shape,
+                        ),
+                      ),
                     );
-                    ref.invalidate(tablesProvider);
-                  },
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.12),
-                      border: Border.all(color: color, width: 1.5),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text('Masa ${table.tableNumber}',
-                            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 6),
-                        Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w600)),
-                        Text('${table.capacity} kişilik', style: const TextStyle(fontSize: 12)),
-                      ],
-                    ),
-                  ),
-                );
-              },
+                  }).toList(),
+                ),
+              ),
             );
           },
         ),

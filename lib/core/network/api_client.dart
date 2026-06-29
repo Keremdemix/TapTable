@@ -89,15 +89,20 @@ class ApiClient {
     }
   }
 
-  Future<Map<String, dynamic>> put(String path, {dynamic data}) async {
+  Future<dynamic> put(String path, {dynamic data}) async {
     try {
       final res = await dio.put(path, data: data);
+
+      // 👇 CRITICAL FIX (204 No Content)
+      if (res.statusCode == 204) {
+        return null;
+      }
+
       return res.data;
     } on DioException catch (e) {
       throw ApiException.fromDioError(e);
     }
   }
-
   Future<Map<String, dynamic>> patch(String path, {dynamic data}) async {
     try {
       final res = await dio.patch(path, data: data);
