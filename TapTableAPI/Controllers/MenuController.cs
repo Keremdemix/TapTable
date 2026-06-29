@@ -24,6 +24,8 @@ public class MenuController : ControllerBase
     // ── Kategoriler ──────────────────────────────────────────────────────
 
     [HttpGet("categories")]
+
+    [Authorize(Roles = "Admin,Waiter")]
     public async Task<IActionResult> GetCategories()
     {
         var categories = await _menuService.GetCategoriesAsync(RestaurantId);
@@ -31,6 +33,7 @@ public class MenuController : ControllerBase
     }
 
     [HttpPost("categories")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> CreateCategory([FromBody] CreateCategoryRequestDto request)
     {
         var category = await _menuService.CreateCategoryAsync(RestaurantId, request);
@@ -38,6 +41,7 @@ public class MenuController : ControllerBase
     }
 
     [HttpPut("categories/{id:int}")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> UpdateCategory(int id, [FromBody] UpdateCategoryRequestDto request)
     {
         var category = await _menuService.UpdateCategoryAsync(id, RestaurantId, request);
@@ -45,6 +49,7 @@ public class MenuController : ControllerBase
     }
 
     [HttpDelete("categories/{id:int}")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> DeleteCategory(int id)
     {
         await _menuService.DeleteCategoryAsync(id, RestaurantId);
@@ -54,6 +59,7 @@ public class MenuController : ControllerBase
     // ── Ürünler ──────────────────────────────────────────────────────────
 
     [HttpGet("items")]
+    [Authorize(Roles = "Admin,Waiter")]
     public async Task<IActionResult> GetItems([FromQuery] int? categoryId)
     {
         var items = await _menuService.GetMenuItemsAsync(RestaurantId, categoryId);
@@ -61,6 +67,7 @@ public class MenuController : ControllerBase
     }
 
     [HttpGet("items/{id:int}")]
+    [Authorize(Roles = "Admin,Waiter")]
     public async Task<IActionResult> GetItem(int id)
     {
         var item = await _menuService.GetMenuItemAsync(id, RestaurantId);
@@ -68,6 +75,7 @@ public class MenuController : ControllerBase
     }
 
     [HttpPost("items")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> CreateItem([FromBody] CreateMenuItemRequestDto request)
     {
         var item = await _menuService.CreateMenuItemAsync(RestaurantId, request);
@@ -75,6 +83,7 @@ public class MenuController : ControllerBase
     }
 
     [HttpPut("items/{id:int}")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> UpdateItem(int id, [FromBody] UpdateMenuItemRequestDto request)
     {
         var item = await _menuService.UpdateMenuItemAsync(id, RestaurantId, request);
@@ -82,6 +91,7 @@ public class MenuController : ControllerBase
     }
 
     [HttpPatch("items/{id:int}/availability")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> SetAvailability(int id, [FromBody] SetAvailabilityRequestDto request)
     {
         var item = await _menuService.SetAvailabilityAsync(id, RestaurantId, request.IsAvailable);
@@ -89,6 +99,7 @@ public class MenuController : ControllerBase
     }
 
     [HttpDelete("items/{id:int}")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> DeleteItem(int id)
     {
         await _menuService.DeleteMenuItemAsync(id, RestaurantId);

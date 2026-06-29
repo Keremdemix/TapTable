@@ -7,7 +7,8 @@ public class Payment
     public decimal Amount { get; set; }
     public PaymentMethod Method { get; set; }
     public SplitType SplitType { get; set; } = SplitType.Full;
-    public string? IyzicoPaymentId { get; set; } 
+    public string? IyzicoPaymentId { get; set; }
+    public string? IyzicoPaymentTransactionId { get; set; }   // ← EKLENDİ: onay (escrow release) API'si bunu istiyor
     public PaymentStatus Status { get; set; } = PaymentStatus.Pending;
     public DateTime CreatedAt { get; set; }
 
@@ -18,7 +19,7 @@ public enum PaymentMethod
 {
     Cash,
     Card,   // garson POS
-    Iyzico 
+    Iyzico
 }
 
 public enum SplitType
