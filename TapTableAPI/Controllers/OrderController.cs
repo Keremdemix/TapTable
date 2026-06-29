@@ -26,6 +26,7 @@ public class OrderController : ControllerBase
         int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
 
     [HttpGet]
+    [Authorize(Roles = "Admin,Waiter,Kitchen")]
     public async Task<IActionResult> GetAll([FromQuery] OrderStatus? status, [FromQuery] int? tableId)
     {
         var orders = await _orderService.GetOrdersAsync(RestaurantId, status, tableId);
@@ -33,6 +34,7 @@ public class OrderController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
+    [Authorize(Roles = "Admin,Waiter,Kitchen")]
     public async Task<IActionResult> GetById(int id)
     {
         var order = await _orderService.GetOrderAsync(id, RestaurantId);
@@ -56,6 +58,8 @@ public class OrderController : ControllerBase
     /// PATCH /api/orders/{orderId}/items/{itemId}/status
     /// </summary>
     [HttpPatch("{orderId:int}/items/{itemId:int}/status")]
+
+    [Authorize(Roles = "Admin,Waiter,Kitchen")]
     public async Task<IActionResult> UpdateItemStatus(int orderId, int itemId, [FromBody] UpdateOrderItemStatusRequestDto request)
     {
         var order = await _orderService.UpdateOrderItemStatusAsync(orderId, itemId, RestaurantId, request.Status);

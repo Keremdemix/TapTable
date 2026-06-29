@@ -8,7 +8,7 @@ namespace TapTable.Api.Controllers;
 
 [ApiController]
 [Route("api/tables")]
-[Authorize(Roles = "Admin")]
+[Authorize(Roles = "Admin,Waiter")]   // ← DEĞİŞTİ: "Admin" yerine "Admin,Waiter"
 public class TableController : ControllerBase
 {
     private readonly ITableService _tableService;
@@ -22,6 +22,7 @@ public class TableController : ControllerBase
         int.Parse(User.FindFirstValue("restaurantId")!);
 
     [HttpGet]
+    // ← Metod seviyesi attribute KALDIRILDI, sınıf seviyesi (Admin,Waiter) zaten yeterli
     public async Task<IActionResult> GetAll()
     {
         var tables = await _tableService.GetTablesAsync(RestaurantId);
@@ -29,17 +30,15 @@ public class TableController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
+    // ← Aynı şekilde kaldırıldı
     public async Task<IActionResult> GetById(int id)
     {
         var table = await _tableService.GetTableAsync(id, RestaurantId);
         return Ok(table);
     }
 
-    /// <summary>
-    /// Yeni masa ekle → QR URL otomatik üretilir → ilk session açılır
-    /// POST /api/tables
-    /// </summary>
     [HttpPost]
+    [Authorize(Roles = "Admin")]   // ← Bu kalıyor: sınıf (Admin,Waiter) AND metod (Admin) = sadece Admin
     public async Task<IActionResult> Create([FromBody] CreateTableRequestDto request)
     {
         var table = await _tableService.CreateTableAsync(RestaurantId, request);
@@ -47,6 +46,7 @@ public class TableController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateTableRequestDto request)
     {
         var table = await _tableService.UpdateTableAsync(id, RestaurantId, request);
@@ -54,41 +54,31 @@ public class TableController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Delete(int id)
     {
         await _tableService.DeleteTableAsync(id, RestaurantId);
         return NoContent();
     }
 
-    /// <summary>
-    /// Admin QR URL'i manuel değiştirir
-    /// PUT /api/tables/{id}/qr-url
-    /// Body: { "url": "https://..." }
-    /// </summary>
     [HttpPut("{id:int}/qr-url")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> SetQrUrl(int id, [FromBody] SetQrUrlRequestDto request)
     {
         var table = await _tableService.SetQrUrlAsync(id, RestaurantId, request.Url);
         return Ok(table);
     }
 
-    /// <summary>
-    /// Admin QR URL'i siler
-    /// DELETE /api/tables/{id}/qr-url
-    /// </summary>
     [HttpDelete("{id:int}/qr-url")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> DeleteQrUrl(int id)
     {
         var table = await _tableService.DeleteQrUrlAsync(id, RestaurantId);
         return Ok(table);
     }
 
-    /// <summary>
-    /// Admin yeni fiziksel QR basmak istediğinde çağırır.
-    /// QR URL değişmez — sadece yeni SessionKey üretilir, eski session kapanır.
-    /// POST /api/tables/{id}/regenerate-qr
-    /// </summary>
     [HttpPost("{id:int}/regenerate-qr")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> RegenerateQr(int id)
     {
         var result = await _tableService.RegenerateQrAsync(id, RestaurantId);

@@ -75,7 +75,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddAuthorization();
-
+Console.WriteLine("JWT SECRET => " + builder.Configuration["Jwt:SecretKey"]);
 //
 // ── CORS ──────────────────────────────────────────────────────────────────────
 //

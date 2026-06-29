@@ -24,6 +24,8 @@ public class IyzicoSubMerchantService : IIyzicoSubMerchantService
         var restaurant = await _restaurantRepository.GetByIdAsync(restaurantId)
             ?? throw new KeyNotFoundException($"Restoran bulunamadı: {restaurantId}");
 
+        // Sub-merchant kaydı oluşturulduğu anda kullanılabilir hale geliyor —
+        // iyzico'da hesap seviyesinde ayrı bir manuel inceleme adımı yok.
         return new IyzicoSubMerchantStatusDto
         {
             HasSubMerchant = !string.IsNullOrEmpty(restaurant.IyzicoSubMerchantKey),
@@ -57,7 +59,6 @@ public class IyzicoSubMerchantService : IIyzicoSubMerchantService
                 Currency = Currency.TRY.ToString()
             };
 
-            // ⚠️ Update metodu SubMerchant model sınıfında, request sınıfında değil
             var updated = await SubMerchant.Update(updateRequest, options);
             if (updated.Status != "success")
                 throw new InvalidOperationException($"iyzico güncelleme hatası: {updated.ErrorMessage}");
@@ -87,7 +88,10 @@ public class IyzicoSubMerchantService : IIyzicoSubMerchantService
 
             var created = await SubMerchant.Create(createRequest, options);
             if (created.Status != "success")
-                throw new InvalidOperationException($"iyzico kayıt hatası: {created.ErrorMessage}");
+            {
+                throw new InvalidOperationException(
+                    $"iyzico kayıt hatası: {created.ErrorMessage} | Code: {created.ErrorCode}");
+            }
 
             restaurant.IyzicoSubMerchantKey = created.SubMerchantKey;
             restaurant.IyzicoSubMerchantExternalId = externalId;

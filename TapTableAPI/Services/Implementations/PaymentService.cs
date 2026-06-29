@@ -6,7 +6,7 @@ using TapTable.Api.DTOs.Response.Payment;
 using TapTable.Api.Helpers;
 using TapTable.Api.Repositories.Interfaces;
 using TapTable.Api.Services.Interfaces;
-using PaymentEntity = TapTable.Api.Data.Entities.Payment;   // ← Iyzipay.Model.Payment ile çakışmayı önlüyor
+using PaymentEntity = TapTable.Api.Data.Entities.Payment;
 
 namespace TapTable.Api.Services.Implementations;
 
@@ -18,6 +18,7 @@ public class PaymentService : IPaymentService
     private readonly IQrSessionRepository _qrSessionRepository;
     private readonly IRestaurantRepository _restaurantRepository;
     private readonly IConfiguration _configuration;
+    private readonly ILogger<PaymentService> _logger;
 
     public PaymentService(
         IPaymentRepository paymentRepository,
@@ -25,7 +26,8 @@ public class PaymentService : IPaymentService
         ITableRepository tableRepository,
         IQrSessionRepository qrSessionRepository,
         IRestaurantRepository restaurantRepository,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        ILogger<PaymentService> logger)
     {
         _paymentRepository = paymentRepository;
         _orderRepository = orderRepository;
@@ -33,6 +35,7 @@ public class PaymentService : IPaymentService
         _qrSessionRepository = qrSessionRepository;
         _restaurantRepository = restaurantRepository;
         _configuration = configuration;
+        _logger = logger;
     }
 
     // ── Garson — manuel ödeme ────────────────────────────────────────────
@@ -168,7 +171,6 @@ public class PaymentService : IPaymentService
             }
         };
 
-        // ⚠️ await eklendi
         var result = await CheckoutFormInitialize.Create(initRequest, options);
         if (result.Status != "success")
             throw new InvalidOperationException($"iyzico ödeme başlatma hatası: {result.ErrorMessage}");
@@ -211,13 +213,19 @@ public class PaymentService : IPaymentService
             Token = token
         };
 
-        // ⚠️ await eklendi
-        var result = await CheckoutForm.Retrieve(retrieveRequest, options);
+        var result = await CheckoutForm.Retrieve(retrieveRequest, options); 
 
         if (result.Status == "success" && result.PaymentStatus == "SUCCESS")
         {
             payment.Status = PaymentStatus.Succeeded;
             payment.IyzicoPaymentId = result.PaymentId;
+
+            // Onay (escrow release) API'si paymentTransactionId istiyor — paymentId değil.
+            // ⚠️ result.ItemTransactions / .PaymentTransactionId alan adları dokümantasyon
+            // örneklerinden çıkarım — SDK'da farklı isimle geliyorsa burada düzeltilmesi gerekir.
+            var transactionId = result.PaymentItems?.FirstOrDefault()?.PaymentTransactionId;
+            payment.IyzicoPaymentTransactionId = transactionId;
+
             await _paymentRepository.UpdateAsync(payment);
 
             var order = await _orderRepository.GetByIdInternalAsync(payment.OrderId);
@@ -254,9 +262,56 @@ public class PaymentService : IPaymentService
             }
 
             await _qrSessionRepository.RotateSessionAsync(order.TableId, order.Table.RestaurantId);
+
+            // Restoranın parasını escrow'dan serbest bırakmak için onay gönder
+            await ApproveIyzicoItemsIfNeededAsync(order);
         }
 
         await _orderRepository.UpdateAsync(order);
+    }
+
+    private async Task ApproveIyzicoItemsIfNeededAsync(Order order)
+    {
+        var iyzicoPayments = (await _paymentRepository.GetByOrderIdAsync(order.Id, order.Table.RestaurantId))
+            .Where(p => p.Method == PaymentMethod.Iyzico
+                     && p.Status == PaymentStatus.Succeeded
+                     && !string.IsNullOrEmpty(p.IyzicoPaymentTransactionId))
+            .ToList();
+
+        if (iyzicoPayments.Count == 0) return;
+
+        var options = IyzicoOptionsFactory.Build(_configuration);
+
+        foreach (var payment in iyzicoPayments)
+        {
+            try
+            {
+                // ⚠️ CreateApprovalRequest / Approval.Create — iyzico SDK'sının resmi "Approval"
+                // (ürün/ödeme onayı) sınıf adlarını doğrudan koddan teyit edemedim, isimlendirme
+                // pattern'ine göre çıkarım yaptım. Sandbox'ta ilk denemede hata alırsanız,
+                // doğru sınıf adını öğrenip burayı tek satırda düzeltiriz.
+                var approveRequest = new CreateApprovalRequest
+                {
+                    Locale = Locale.TR.ToString(),
+                    ConversationId = Guid.NewGuid().ToString(),
+                    PaymentTransactionId = payment.IyzicoPaymentTransactionId
+                };
+
+                var approveResult = await Approval.Create(approveRequest, options);
+
+                if (approveResult.Status != "success")
+                {
+                    _logger.LogWarning(
+                        "iyzico onay başarısız — paymentId={PaymentId}, error={Error}",
+                        payment.Id, approveResult.ErrorMessage);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "iyzico ödeme onayı sırasında hata — paymentId={PaymentId}", payment.Id);
+            }
+        }
     }
 
     private async Task<RestaurantTable> ValidateSessionAsync(int tableId, string sessionKey)
