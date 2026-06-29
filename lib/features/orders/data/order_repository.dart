@@ -35,4 +35,17 @@ class OrderRepository {
         OrderItemStatus.served => 'Served',
         OrderItemStatus.cancelled => 'Cancelled',
       };
+      
+  Future<OrderResponseDto> createOrderByStaff({
+    required int tableId,
+    required List<OrderItemInput> items,
+    String? note,
+  }) async {
+    final json = await _apiClient.post('/orders', data: {
+      'tableId': tableId,
+      'items': items.map((i) => i.toJson()).toList(),
+      'note': note,
+    });
+    return OrderResponseDto.fromJson(json);
+  }
 }
