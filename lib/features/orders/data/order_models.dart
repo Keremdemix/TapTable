@@ -65,3 +65,17 @@ class OrderResponseDto with _$OrderResponseDto {
   factory OrderResponseDto.fromJson(Map<String, dynamic> json) =>
       _$OrderResponseDtoFromJson(json);
 }
+
+class OrderItemInput {
+  final int menuItemId;
+  final int quantity;
+  final String? note;
+
+  OrderItemInput({required this.menuItemId, required this.quantity, this.note});
+
+  Map<String, dynamic> toJson() => {
+        'menuItemId': menuItemId,
+        'quantity': quantity,
+        'note': note,
+      };
+}
