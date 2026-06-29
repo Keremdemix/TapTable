@@ -8,7 +8,7 @@ namespace TapTable.Api.Controllers;
 
 [ApiController]
 [Route("api/tables")]
-[Authorize(Roles = "Admin,Waiter")]   // ← DEĞİŞTİ: "Admin" yerine "Admin,Waiter"
+[Authorize(Roles = "Admin,Waiter")]
 public class TableController : ControllerBase
 {
     private readonly ITableService _tableService;
@@ -22,7 +22,6 @@ public class TableController : ControllerBase
         int.Parse(User.FindFirstValue("restaurantId")!);
 
     [HttpGet]
-    // ← Metod seviyesi attribute KALDIRILDI, sınıf seviyesi (Admin,Waiter) zaten yeterli
     public async Task<IActionResult> GetAll()
     {
         var tables = await _tableService.GetTablesAsync(RestaurantId);
@@ -30,7 +29,6 @@ public class TableController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
-    // ← Aynı şekilde kaldırıldı
     public async Task<IActionResult> GetById(int id)
     {
         var table = await _tableService.GetTableAsync(id, RestaurantId);
@@ -38,7 +36,7 @@ public class TableController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "Admin")]   // ← Bu kalıyor: sınıf (Admin,Waiter) AND metod (Admin) = sadece Admin
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Create([FromBody] CreateTableRequestDto request)
     {
         var table = await _tableService.CreateTableAsync(RestaurantId, request);
@@ -83,5 +81,28 @@ public class TableController : ControllerBase
     {
         var result = await _tableService.RegenerateQrAsync(id, RestaurantId);
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Kat planı — masaların konum/boyut/şekil bilgisi. Admin ve Waiter görebilir.
+    /// GET /api/tables/layout
+    /// </summary>
+    [HttpGet("layout")]
+    public async Task<IActionResult> GetLayout()
+    {
+        var layout = await _tableService.GetLayoutAsync(RestaurantId);
+        return Ok(layout);
+    }
+
+    /// <summary>
+    /// Kat planını kaydet — sadece Admin (sürükle-bırak editörü).
+    /// PUT /api/tables/layout 
+    /// </summary>
+    [HttpPut("layout")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> SaveLayout([FromBody] UpdateLayoutRequestDto request)
+    {
+        await _tableService.SaveLayoutAsync(RestaurantId, request);
+        return NoContent();
     }
 }
