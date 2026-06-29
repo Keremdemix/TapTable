@@ -52,7 +52,7 @@ namespace TapTableAPI.Migrations
 
                     b.HasIndex("RestaurantId");
 
-                    b.ToTable("Categories");
+                    b.ToTable("Categories", (string)null);
                 });
 
             modelBuilder.Entity("TapTable.Api.Data.Entities.MenuItem", b =>
@@ -111,7 +111,7 @@ namespace TapTableAPI.Migrations
 
                     b.HasIndex("CategoryId");
 
-                    b.ToTable("MenuItems");
+                    b.ToTable("MenuItems", (string)null);
                 });
 
             modelBuilder.Entity("TapTable.Api.Data.Entities.Order", b =>
@@ -167,7 +167,7 @@ namespace TapTableAPI.Migrations
 
                     b.HasIndex("WaiterId");
 
-                    b.ToTable("Orders");
+                    b.ToTable("Orders", (string)null);
                 });
 
             modelBuilder.Entity("TapTable.Api.Data.Entities.OrderItem", b =>
@@ -207,7 +207,7 @@ namespace TapTableAPI.Migrations
 
                     b.HasIndex("OrderId");
 
-                    b.ToTable("OrderItems");
+                    b.ToTable("OrderItems", (string)null);
                 });
 
             modelBuilder.Entity("TapTable.Api.Data.Entities.Payment", b =>
@@ -259,7 +259,7 @@ namespace TapTableAPI.Migrations
 
                     b.HasIndex("OrderId");
 
-                    b.ToTable("Payments");
+                    b.ToTable("Payments", (string)null);
                 });
 
             modelBuilder.Entity("TapTable.Api.Data.Entities.QrSession", b =>
@@ -295,7 +295,7 @@ namespace TapTableAPI.Migrations
 
                     b.HasIndex("TableId");
 
-                    b.ToTable("QrSessions");
+                    b.ToTable("QrSessions", (string)null);
                 });
 
             modelBuilder.Entity("TapTable.Api.Data.Entities.Restaurant", b =>
@@ -339,7 +339,7 @@ namespace TapTableAPI.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Restaurants");
+                    b.ToTable("Restaurants", (string)null);
                 });
 
             modelBuilder.Entity("TapTable.Api.Data.Entities.RestaurantTable", b =>
@@ -390,7 +390,7 @@ namespace TapTableAPI.Migrations
                         .IsUnique()
                         .HasFilter("[IsActive] = 1");
 
-                    b.ToTable("RestaurantTables");
+                    b.ToTable("RestaurantTables", (string)null);
                 });
 
             modelBuilder.Entity("TapTable.Api.Data.Entities.Role", b =>
@@ -411,7 +411,7 @@ namespace TapTableAPI.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("Roles");
+                    b.ToTable("Roles", (string)null);
                 });
 
             modelBuilder.Entity("TapTable.Api.Data.Entities.TableLayout", b =>
@@ -453,7 +453,7 @@ namespace TapTableAPI.Migrations
                     b.HasIndex("TableId")
                         .IsUnique();
 
-                    b.ToTable("TableLayouts");
+                    b.ToTable("TableLayouts", (string)null);
                 });
 
             modelBuilder.Entity("TapTable.Api.Data.Entities.User", b =>
@@ -515,7 +515,7 @@ namespace TapTableAPI.Migrations
 
                     b.HasIndex("RoleId");
 
-                    b.ToTable("Users");
+                    b.ToTable("Users", (string)null);
                 });
 
             modelBuilder.Entity("TapTable.Api.Data.Entities.Category", b =>

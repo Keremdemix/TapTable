@@ -31,4 +31,6 @@ public interface ITableService
     /// mevcut session'ı kapat → yeni session aç → aynı QR URL'i döndür
     /// </summary>
     Task<RegenerateQrResponseDto> RegenerateQrAsync(int tableId, int restaurantId);
+    Task<IEnumerable<TableLayoutResponseDto>> GetLayoutAsync(int restaurantId);
+    Task SaveLayoutAsync(int restaurantId, UpdateLayoutRequestDto request);
 }

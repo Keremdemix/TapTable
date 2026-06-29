@@ -25,6 +25,7 @@ public class TableRepository : ITableRepository
     public async Task<IEnumerable<RestaurantTable>> GetAllAsync(int restaurantId)
     {
         return await _context.RestaurantTables
+            .Include(t => t.Layout)              // ← EKLENDİ
             .Where(t => t.RestaurantId == restaurantId && t.IsActive)
             .OrderBy(t => t.TableNumber)
             .ToListAsync();

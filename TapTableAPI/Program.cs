@@ -121,6 +121,7 @@ builder.Services.AddScoped<IMenuItemRepository, MenuItemRepository>();
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
 builder.Services.AddScoped<IRestaurantRepository, RestaurantRepository>();
+builder.Services.AddScoped<ITableLayoutRepository, TableLayoutRepository>();
 
 //
 // ── Services ───────────────────────────────────────────────────────────────────

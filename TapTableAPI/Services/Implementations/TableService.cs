@@ -10,15 +10,18 @@ public class TableService : ITableService
 {
     private readonly ITableRepository _tableRepository;
     private readonly IQrSessionRepository _qrSessionRepository;
+    private readonly ITableLayoutRepository _tableLayoutRepository;
     private readonly string _customerBaseUrl;
 
     public TableService(
         ITableRepository tableRepository,
         IQrSessionRepository qrSessionRepository,
+        ITableLayoutRepository tableLayoutRepository,
         IConfiguration configuration)
     {
         _tableRepository = tableRepository;
         _qrSessionRepository = qrSessionRepository;
+        _tableLayoutRepository = tableLayoutRepository;
         _customerBaseUrl = configuration["App:CustomerBaseUrl"]
             ?? "https://customer.taptable.com";
     }
@@ -39,13 +42,12 @@ public class TableService : ITableService
 
     public async Task<TableResponseDto> CreateTableAsync(int restaurantId, CreateTableRequestDto request)
     {
-        // 1. Masayı kaydet
         var table = new RestaurantTable
         {
             RestaurantId = restaurantId,
             TableNumber = request.TableNumber,
             Capacity = request.Capacity,
-            QrCodeUrl = string.Empty, // Id gelince doldurulacak
+            QrCodeUrl = string.Empty,
             Status = TableStatus.Available,
             IsActive = true,
             CreatedAt = DateTime.UtcNow
@@ -53,11 +55,9 @@ public class TableService : ITableService
 
         var created = await _tableRepository.CreateAsync(table);
 
-        // 2. Kalıcı QR URL — tableId bazlı, fiziksel QR hiç değişmez
         created.QrCodeUrl = $"{_customerBaseUrl}/table/{created.Id}";
         await _tableRepository.UpdateAsync(created);
 
-        // 3. İlk QrSession'ı otomatik aç
         await _qrSessionRepository.CreateAsync(new QrSession
         {
             TableId = created.Id,
@@ -65,6 +65,22 @@ public class TableService : ITableService
             SessionKey = NewSessionKey(),
             IsActive = true,
             CreatedAt = DateTime.UtcNow
+        });
+
+        // Kat planında varsayılan bir konum ver — admin sonra sürükleyip yerleştirir
+        var existingCount = (await _tableRepository.GetAllAsync(restaurantId)).Count();
+        var index = existingCount - 1; // yeni eklenen masa dahil say, 0-bazlı yap
+        var col = index % 5;
+        var row = index / 5;
+
+        await _tableLayoutRepository.CreateAsync(new TableLayout
+        {
+            TableId = created.Id,
+            Width = 100,
+            Height = 100,
+            Shape = "rectangle",
+            PositionX = 40 + col * 150,
+            PositionY = 40 + row * 150
         });
 
         return MapToDto(created);
@@ -79,7 +95,6 @@ public class TableService : ITableService
         table.Capacity = request.Capacity;
         table.IsActive = request.IsActive;
 
-        // null → dokunma | boş string → sil | değer → güncelle
         if (request.QrCodeUrl is not null)
             table.QrCodeUrl = request.QrCodeUrl;
 
@@ -109,9 +124,7 @@ public class TableService : ITableService
         var table = await _tableRepository.GetByIdAsync(tableId, restaurantId)
             ?? throw new KeyNotFoundException($"Masa bulunamadı: {tableId}");
 
-        // Açık session varsa kapat
         await _qrSessionRepository.CloseActiveSessionAsync(tableId);
-
         await _tableRepository.DeleteAsync(table);
     }
 
@@ -120,10 +133,8 @@ public class TableService : ITableService
         var table = await _tableRepository.GetByIdAsync(tableId, restaurantId)
             ?? throw new KeyNotFoundException($"Masa bulunamadı: {tableId}");
 
-        // Mevcut session'ı kapat
         await _qrSessionRepository.CloseActiveSessionAsync(tableId);
 
-        // Yeni session aç — sonraki müşteriler bu key ile başlar
         var newKey = NewSessionKey();
         await _qrSessionRepository.CreateAsync(new QrSession
         {
@@ -134,7 +145,6 @@ public class TableService : ITableService
             CreatedAt = DateTime.UtcNow
         });
 
-        // Fiziksel QR URL değişmez — sadece yeni sessionKey dönüyoruz
         return new RegenerateQrResponseDto
         {
             TableId = table.Id,
@@ -142,6 +152,59 @@ public class TableService : ITableService
             QrCodeUrl = table.QrCodeUrl,
             NewSessionKey = newKey
         };
+    }
+
+    // ── Kat Planı ────────────────────────────────────────────────────────
+
+    public async Task<IEnumerable<TableLayoutResponseDto>> GetLayoutAsync(int restaurantId)
+    {
+        var tables = await _tableRepository.GetAllAsync(restaurantId);
+
+        return tables.Select(t => new TableLayoutResponseDto
+        {
+            TableId = t.Id,
+            TableNumber = t.TableNumber,
+            Capacity = t.Capacity,
+            Status = t.Status.ToString(),
+            Width = t.Layout?.Width ?? 100,
+            Height = t.Layout?.Height ?? 100,
+            Shape = t.Layout?.Shape ?? "rectangle",
+            PositionX = t.Layout?.PositionX ?? 0,
+            PositionY = t.Layout?.PositionY ?? 0
+        });
+    }
+
+    public async Task SaveLayoutAsync(int restaurantId, UpdateLayoutRequestDto request)
+    {
+        foreach (var item in request.Layouts)
+        {
+            var table = await _tableRepository.GetByIdAsync(item.TableId, restaurantId);
+            if (table is null) continue; // başka restorana ait/bulunamayan masa — sessizce atla
+
+            var layout = await _tableLayoutRepository.GetByTableIdAsync(item.TableId);
+
+            if (layout is null)
+            {
+                await _tableLayoutRepository.CreateAsync(new TableLayout
+                {
+                    TableId = item.TableId,
+                    Width = item.Width,
+                    Height = item.Height,
+                    Shape = item.Shape,
+                    PositionX = item.PositionX,
+                    PositionY = item.PositionY
+                });
+            }
+            else
+            {
+                layout.Width = item.Width;
+                layout.Height = item.Height;
+                layout.Shape = item.Shape;
+                layout.PositionX = item.PositionX;
+                layout.PositionY = item.PositionY;
+                await _tableLayoutRepository.UpdateAsync(layout);
+            }
+        }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
