@@ -40,17 +40,17 @@ Color _paymentStatusColor(OrderPaymentStatus status) => switch (status) {
     };
 
 class WaiterTableDetailScreen extends ConsumerWidget {
-  final TableResponseDto table;
-  const WaiterTableDetailScreen({super.key, required this.table});
+    final int tableId;
+  final int tableNumber;
+  const WaiterTableDetailScreen({super.key, required this.tableId, required this.tableNumber});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final orderAsync = ref.watch(_tableActiveOrderProvider(table.id));
-
+    final orderAsync = ref.watch(_tableActiveOrderProvider(tableId));
     return Scaffold(
-      appBar: AppBar(title: Text('Masa ${table.tableNumber}')),
+      appBar: AppBar(title: Text('Masa ${tableNumber}')),
       body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(_tableActiveOrderProvider(table.id)),
+        onRefresh: () async => ref.invalidate(_tableActiveOrderProvider(tableId)),
         child: orderAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (err, _) => Center(child: Text('Hata: $err')),
@@ -66,9 +66,9 @@ class WaiterTableDetailScreen extends ConsumerWidget {
                     onPressed: () async {
                       await Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => WaiterItemPickerScreen(tableId: table.id)),
+                        MaterialPageRoute(builder: (_) => WaiterItemPickerScreen(tableId: tableId)),
                       );
-                      ref.invalidate(_tableActiveOrderProvider(table.id));
+                      ref.invalidate(_tableActiveOrderProvider(tableId));
                     },
                     icon: const Icon(Icons.add),
                     label: const Text('Sipariş Oluştur'),
@@ -120,9 +120,9 @@ class WaiterTableDetailScreen extends ConsumerWidget {
                   onPressed: () async {
                     await Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => WaiterItemPickerScreen(tableId: table.id)),
+                      MaterialPageRoute(builder: (_) => WaiterItemPickerScreen(tableId: tableId)),
                     );
-                    ref.invalidate(_tableActiveOrderProvider(table.id));
+                    ref.invalidate(_tableActiveOrderProvider(tableId));
                   },
                   icon: const Icon(Icons.add),
                   label: const Text('Ürün Ekle'),
@@ -136,7 +136,7 @@ class WaiterTableDetailScreen extends ConsumerWidget {
                             context,
                             MaterialPageRoute(builder: (_) => WaiterPaymentScreen(order: order)),
                           );
-                          ref.invalidate(_tableActiveOrderProvider(table.id));
+                          ref.invalidate(_tableActiveOrderProvider(tableId));
                         },
                   icon: const Icon(Icons.payments),
                   label: Text(order.paymentStatus == OrderPaymentStatus.paid ? 'Ödendi' : 'Ödeme Al'),

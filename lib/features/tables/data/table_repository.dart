@@ -1,5 +1,6 @@
 import '../../../core/network/api_client.dart';
 import 'table_models.dart';
+import 'table_layout_models.dart'; 
 
 class TableRepository {
   final ApiClient _apiClient;
@@ -38,5 +39,18 @@ class TableRepository {
   Future<RegenerateQrResponseDto> regenerateQr(int id) async {
     final json = await _apiClient.post('/tables/$id/regenerate-qr');
     return RegenerateQrResponseDto.fromJson(json);
+  }
+  Future<List<TableLayoutResponseDto>> getLayout() async {
+    final list = await _apiClient.getList('/tables/layout');
+    return list.map((j) => TableLayoutResponseDto.fromJson(j as Map<String, dynamic>)).toList();
+  }
+
+  Future<void> saveLayout(List<UpdateTableLayoutItemInput> items) async {
+    await _apiClient.put(
+      '/tables/layout',
+      data: {
+        'layouts': items.map((i) => i.toJson()).toList(),
+      },
+    );
   }
 }

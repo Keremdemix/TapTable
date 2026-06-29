@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tap_table_staff/features/iyzico_connect/presentation/admin_iyzico_connect_screen.dart';
+import 'package:tap_table_staff/features/tables/presentation/admin_floor_plan_screen.dart';
 import '../../auth/application/auth_providers.dart';
 import '../../tables/presentation/admin_tables_screen.dart';
 import '../../menu/presentation/admin_menu_screen.dart';
@@ -43,6 +44,12 @@ class AdminHomeScreen extends ConsumerWidget {
               title: 'Ödeme Ayarları',
             subtitle: 'Stripe Connect kurulumu',
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminIyzicoConnectScreen())),
+          ),
+          _AdminMenuTile(
+            icon: Icons.dashboard_customize,
+            title: 'Masa Düzeni',
+            subtitle: 'Mekanın kat planını sürükle-bırak ile düzenle',
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminFloorPlanScreen())),
           ),
         ],
       ),
