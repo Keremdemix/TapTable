@@ -127,4 +127,16 @@ class ApiClient {
       throw ApiException.fromDioError(e);
     }
   }
+
+  Future<String> uploadImage(String path) async {
+  try {
+    final formData = FormData.fromMap({
+      'file': await MultipartFile.fromFile(path, filename: path.split('/').last),
+    });
+    final res = await dio.post('/images/menu-item', data: formData);
+    return res.data['url'] as String;
+  } on DioException catch (e) {
+    throw ApiException.fromDioError(e);
+  }
+}
 }
