@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 import '../config/app_config.dart';
 import '../storage/token_storage.dart';
@@ -128,15 +130,16 @@ class ApiClient {
     }
   }
 
-  Future<String> uploadImage(String path) async {
-  try {
-    final formData = FormData.fromMap({
-      'file': await MultipartFile.fromFile(path, filename: path.split('/').last),
-    });
-    final res = await dio.post('/images/menu-item', data: formData);
-    return res.data['url'] as String;
-  } on DioException catch (e) {
-    throw ApiException.fromDioError(e);
-  }
+Future<String> uploadImage(Uint8List bytes, String fileName) async {
+  final formData = FormData.fromMap({
+    'file': MultipartFile.fromBytes(
+      bytes,
+      filename: fileName,
+    ),
+  });
+
+  final res = await dio.post('/images/menu-item', data: formData);
+
+  return res.data['url'] as String;
 }
 }

@@ -1,11 +1,16 @@
+import 'dart:typed_data';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 
 class ImagePickerField extends StatefulWidget {
   final String? initialUrl;
   final void Function(String url) onUploaded;
-  final Future<String> Function(String filePath) uploadFn;
+
+  /// Web + mobile uyumlu: bytes + filename almalı
+  final Future<String> Function(Uint8List bytes, String fileName) uploadFn;
 
   const ImagePickerField({
     super.key,
@@ -30,17 +35,42 @@ class _ImagePickerFieldState extends State<ImagePickerField> {
 
   Future<void> _pick() async {
     final picker = ImagePicker();
+
     final picked = await picker.pickImage(
       source: ImageSource.gallery,
-      maxWidth: 1200,
-      maxHeight: 1200,
-      imageQuality: 90,
+      imageQuality: 95,
     );
+
     if (picked == null) return;
 
+    /// 1. CROPPER (mobile + web fallback destekli)
+    final cropped = await ImageCropper().cropImage(
+      sourcePath: picked.path,
+      aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+      uiSettings: [
+        AndroidUiSettings(
+          toolbarTitle: 'Görseli Düzenle',
+          lockAspectRatio: false,
+        ),
+        IOSUiSettings(
+          title: 'Görseli Düzenle',
+        ),
+        WebUiSettings(
+          context: context,
+        ),
+      ],
+    );
+
+    if (cropped == null) return;
+
     setState(() => _uploading = true);
+
     try {
-      final url = await widget.uploadFn(picked.path);
+      final bytes = await cropped.readAsBytes();
+      final fileName = picked.name;
+
+      final url = await widget.uploadFn(bytes, fileName);
+
       setState(() => _currentUrl = url);
       widget.onUploaded(url);
     } catch (e) {
@@ -64,8 +94,12 @@ class _ImagePickerFieldState extends State<ImagePickerField> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Ürün Görseli', style: TextStyle(fontWeight: FontWeight.w500)),
+        const Text(
+          'Ürün Görseli',
+          style: TextStyle(fontWeight: FontWeight.w500),
+        ),
         const SizedBox(height: 8),
+
         if (_currentUrl != null && _currentUrl!.isNotEmpty) ...[
           Stack(
             children: [
@@ -93,7 +127,8 @@ class _ImagePickerFieldState extends State<ImagePickerField> {
                   radius: 14,
                   backgroundColor: Colors.black54,
                   child: IconButton(
-                    icon: const Icon(Icons.close, size: 14, color: Colors.white),
+                    icon: const Icon(Icons.close,
+                        size: 14, color: Colors.white),
                     onPressed: _remove,
                     padding: EdgeInsets.zero,
                   ),
@@ -115,7 +150,7 @@ class _ImagePickerFieldState extends State<ImagePickerField> {
               width: double.infinity,
               decoration: BoxDecoration(
                 color: Colors.grey.shade100,
-                border: Border.all(color: Colors.grey.shade300, style: BorderStyle.solid),
+                border: Border.all(color: Colors.grey.shade300),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: _uploading
@@ -123,9 +158,16 @@ class _ImagePickerFieldState extends State<ImagePickerField> {
                   : Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.add_photo_alternate_outlined, size: 40, color: Colors.grey.shade400),
+                        Icon(
+                          Icons.add_photo_alternate_outlined,
+                          size: 40,
+                          color: Colors.grey.shade400,
+                        ),
                         const SizedBox(height: 8),
-                        Text('Görsel Ekle', style: TextStyle(color: Colors.grey.shade600)),
+                        Text(
+                          'Görsel Ekle',
+                          style: TextStyle(color: Colors.grey.shade600),
+                        ),
                       ],
                     ),
             ),

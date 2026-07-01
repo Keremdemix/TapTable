@@ -1,12 +1,17 @@
+import 'dart:typed_data';
+import 'dart:ui';
+
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:crop_your_image/crop_your_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
-import '../../../core/network/api_client.dart';
+import 'package:tap_table_staff/features/menu/presentation/widgets/crop_dialog.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/providers.dart';
 import '../application/menu_providers.dart';
 import '../data/menu_models.dart';
+import 'package:http/http.dart' as http;
 
 class AdminMenuScreen extends StatelessWidget {
   const AdminMenuScreen({super.key});
@@ -240,7 +245,8 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
     bool isAvailable = existing?.isAvailable ?? true;
     bool isActive = existing?.isActive ?? true;
     String? uploadedImageUrl = existing?.imageUrl;
-    bool imageUploading = false;
+    Uint8List? pendingImageBytes; // henüz upload edilmemiş, kaydet anında yüklenecek
+    bool imageUploading = false; // sadece kırpma/indirme için loading; asıl upload Kaydet'te
 
     final apiClient = ref.read(apiClientProvider);
 
@@ -249,35 +255,97 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
       barrierDismissible: false,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) {
-          // ── Resim yükleme fonksiyonu ──────────────────────────────────
-          Future<void> pickAndUpload() async {
+          // ── Galeriden yeni resim seç + kırp (upload ETMEZ) ──────────────
+          Future<void> pickAndCrop() async {
             final picker = ImagePicker();
+
             final picked = await picker.pickImage(
               source: ImageSource.gallery,
-              maxWidth: 1200,
-              maxHeight: 1200,
-              imageQuality: 90,
+              imageQuality: 95,
             );
+
             if (picked == null) return;
 
             setDialogState(() => imageUploading = true);
+
             try {
-              final url = await apiClient.uploadImage(picked.path);
-              setDialogState(() => uploadedImageUrl = url);
-            } on ApiException catch (e) {
-              if (dialogContext.mounted) {
-                ScaffoldMessenger.of(dialogContext)
-                    .showSnackBar(SnackBar(content: Text('Yükleme başarısız: ${e.message}')));
+              final bytes = await picked.readAsBytes();
+
+              final croppedBytes = await showDialog<Uint8List>(
+                context: context,
+                barrierDismissible: false,
+                builder: (_) => CropDialog(imageBytes: bytes),
+              );
+
+              if (croppedBytes == null) {
+                setDialogState(() => imageUploading = false);
+                return;
               }
+
+              // Upload YOK — sadece local'de tutuluyor, Kaydet'e basınca yüklenecek
+              setDialogState(() {
+                pendingImageBytes = croppedBytes;
+                imageUploading = false;
+              });
             } catch (e) {
               if (dialogContext.mounted) {
-                ScaffoldMessenger.of(dialogContext)
-                    .showSnackBar(SnackBar(content: Text('Yükleme başarısız: $e')));
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  SnackBar(content: Text('Görsel işlenemedi: $e')),
+                );
               }
-            } finally {
               setDialogState(() => imageUploading = false);
             }
           }
+
+          // ── Mevcut görseli (bekleyen ya da yüklü) tekrar kırp ───────────
+          Future<void> reEditImage() async {
+            setDialogState(() => imageUploading = true);
+
+            try {
+              Uint8List bytes;
+
+              if (pendingImageBytes != null) {
+                // Henüz upload edilmemiş görseli tekrar kırp
+                bytes = pendingImageBytes!;
+              } else if (uploadedImageUrl != null && uploadedImageUrl!.isNotEmpty) {
+                // Sunucudaki mevcut görseli indir
+                final response = await http.get(Uri.parse(uploadedImageUrl!));
+                if (response.statusCode != 200) {
+                  throw Exception('Görsel indirilemedi (${response.statusCode})');
+                }
+                bytes = response.bodyBytes;
+              } else {
+                setDialogState(() => imageUploading = false);
+                return;
+              }
+
+              final croppedBytes = await showDialog<Uint8List>(
+                context: context,
+                barrierDismissible: false,
+                builder: (_) => CropDialog(imageBytes: bytes),
+              );
+
+              if (croppedBytes == null) {
+                setDialogState(() => imageUploading = false);
+                return;
+              }
+
+              setDialogState(() {
+                pendingImageBytes = croppedBytes; // upload YOK, Kaydet'i bekliyor
+                imageUploading = false;
+              });
+            } catch (e) {
+              if (dialogContext.mounted) {
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  SnackBar(content: Text('Düzenleme başarısız: $e')),
+                );
+              }
+              setDialogState(() => imageUploading = false);
+            }
+          }
+
+          final hasImage = pendingImageBytes != null ||
+              (uploadedImageUrl != null && uploadedImageUrl!.isNotEmpty);
 
           // ── Dialog içeriği ────────────────────────────────────────────
           return AlertDialog(
@@ -342,27 +410,30 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
                             color: Colors.black87)),
                     const SizedBox(height: 8),
 
-                    if (uploadedImageUrl != null && uploadedImageUrl!.isNotEmpty)
-                      // Yüklü görsel varsa göster
+                    if (hasImage)
+                      // Görsel varsa (bekleyen ya da yüklü) göster
                       Stack(
                         children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: CachedNetworkImage(
-                              imageUrl: uploadedImageUrl!,
-                              height: 160,
-                              width: double.infinity,
-                              fit: BoxFit.cover,
-                              placeholder: (_, __) => const SizedBox(
-                                height: 160,
-                                child: Center(child: CircularProgressIndicator()),
-                              ),
-                              errorWidget: (_, __, ___) => Container(
-                                height: 160,
-                                color: Colors.grey.shade200,
-                                child: const Center(
-                                    child: Icon(Icons.broken_image, size: 40)),
-                              ),
+                          AspectRatio(
+                            aspectRatio: 1.2,
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: pendingImageBytes != null
+                                  ? Image.memory(
+                                      pendingImageBytes!,
+                                      fit: BoxFit.cover,
+                                    )
+                                  : CachedNetworkImage(
+                                      imageUrl: uploadedImageUrl!,
+                                      fit: BoxFit.cover,
+                                      placeholder: (_, __) => const Center(
+                                        child: CircularProgressIndicator(),
+                                      ),
+                                      errorWidget: (_, __, ___) => Container(
+                                        color: Colors.grey.shade200,
+                                        child: const Icon(Icons.broken_image),
+                                      ),
+                                    ),
                             ),
                           ),
                           // Kaldır butonu
@@ -370,7 +441,10 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
                             top: 6,
                             right: 6,
                             child: GestureDetector(
-                              onTap: () => setDialogState(() => uploadedImageUrl = null),
+                              onTap: () => setDialogState(() {
+                                uploadedImageUrl = null;
+                                pendingImageBytes = null;
+                              }),
                               child: Container(
                                 decoration: BoxDecoration(
                                   color: Colors.black54,
@@ -381,39 +455,77 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
                               ),
                             ),
                           ),
-                          // Değiştir butonu
+                          // Sağ alt butonlar: Düzenle + Değiştir
                           Positioned(
                             bottom: 6,
                             right: 6,
-                            child: GestureDetector(
-                              onTap: imageUploading ? null : pickAndUpload,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.black54,
-                                  borderRadius: BorderRadius.circular(20),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // Düzenle (mevcut görseli tekrar kırp)
+                                GestureDetector(
+                                  onTap: imageUploading ? null : reEditImage,
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.black54,
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10, vertical: 5),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        if (imageUploading)
+                                          const SizedBox(
+                                            width: 12,
+                                            height: 12,
+                                            child: CircularProgressIndicator(
+                                                strokeWidth: 2, color: Colors.white),
+                                          )
+                                        else
+                                          const Icon(Icons.crop,
+                                              color: Colors.white, size: 14),
+                                        const SizedBox(width: 4),
+                                        const Text('Düzenle',
+                                            style: TextStyle(
+                                                color: Colors.white, fontSize: 11)),
+                                      ],
+                                    ),
+                                  ),
                                 ),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 5),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if (imageUploading)
-                                      const SizedBox(
-                                        width: 12,
-                                        height: 12,
-                                        child: CircularProgressIndicator(
-                                            strokeWidth: 2, color: Colors.white),
-                                      )
-                                    else
-                                      const Icon(Icons.swap_horiz,
-                                          color: Colors.white, size: 14),
-                                    const SizedBox(width: 4),
-                                    const Text('Değiştir',
-                                        style: TextStyle(
-                                            color: Colors.white, fontSize: 11)),
-                                  ],
+                                const SizedBox(width: 6),
+                                // Değiştir (yeni görsel seç)
+                                GestureDetector(
+                                  onTap: imageUploading ? null : pickAndCrop,
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.black54,
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10, vertical: 5),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        if (imageUploading)
+                                          const SizedBox(
+                                            width: 12,
+                                            height: 12,
+                                            child: CircularProgressIndicator(
+                                                strokeWidth: 2, color: Colors.white),
+                                          )
+                                        else
+                                          const Icon(Icons.swap_horiz,
+                                              color: Colors.white, size: 14),
+                                        const SizedBox(width: 4),
+                                        const Text('Değiştir',
+                                            style: TextStyle(
+                                                color: Colors.white, fontSize: 11)),
+                                      ],
+                                    ),
+                                  ),
                                 ),
-                              ),
+                              ],
                             ),
                           ),
                         ],
@@ -421,7 +533,7 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
                     else
                       // Görsel yok — yükleme alanı
                       GestureDetector(
-                        onTap: imageUploading ? null : pickAndUpload,
+                        onTap: imageUploading ? null : pickAndCrop,
                         child: Container(
                           height: 120,
                           width: double.infinity,
@@ -483,14 +595,12 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
                         final priceText =
                             priceController.text.trim().replaceAll(',', '.');
                         final price = double.tryParse(priceText);
-                        final sortOrder =
-                            int.tryParse(sortController.text) ?? 0;
+                        final sortOrder = int.tryParse(sortController.text) ?? 0;
 
                         if (name.isEmpty || price == null) {
                           ScaffoldMessenger.of(dialogContext).showSnackBar(
                             const SnackBar(
-                                content: Text(
-                                    'Ürün adı ve geçerli bir fiyat girin.')),
+                                content: Text('Ürün adı ve geçerli bir fiyat girin.')),
                           );
                           return;
                         }
@@ -498,11 +608,23 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
                         final desc = descController.text.trim().isEmpty
                             ? null
                             : descController.text.trim();
-                        final imgUrl = (uploadedImageUrl?.isEmpty ?? true)
-                            ? null
-                            : uploadedImageUrl;
 
                         try {
+                          // ── Görsel varsa şimdi upload et ──────────────────────
+                          String? finalImageUrl = uploadedImageUrl;
+
+                          if (pendingImageBytes != null) {
+                            setDialogState(() => imageUploading = true);
+                            final fileName =
+                                'item_${DateTime.now().millisecondsSinceEpoch}.jpg';
+                            finalImageUrl = await apiClient.uploadImage(
+                                pendingImageBytes!, fileName);
+                            setDialogState(() => imageUploading = false);
+                          }
+
+                          final imgUrl =
+                              (finalImageUrl?.isEmpty ?? true) ? null : finalImageUrl;
+
                           final repository = ref.read(menuRepositoryProvider);
                           if (existing == null) {
                             await repository.createItem(
@@ -532,9 +654,10 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
                             Navigator.pop(dialogContext);
                           }
                         } on ApiException catch (e) {
+                          setDialogState(() => imageUploading = false);
                           if (dialogContext.mounted) {
-                            ScaffoldMessenger.of(dialogContext).showSnackBar(
-                                SnackBar(content: Text(e.message)));
+                            ScaffoldMessenger.of(dialogContext)
+                                .showSnackBar(SnackBar(content: Text(e.message)));
                           }
                         }
                       },
@@ -662,79 +785,88 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
                     itemCount: filtered.length,
                     itemBuilder: (context, index) {
                       final item = filtered[index];
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: ListTile(
-                          // Görsel varsa thumbnail olarak göster
-                          leading: item.imageUrl != null &&
-                                  item.imageUrl!.isNotEmpty
-                              ? ClipRRect(
-                                  borderRadius: BorderRadius.circular(6),
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+
+                        // ── IMAGE ─────────────────────────────────────────────
+                        leading: item.imageUrl != null && item.imageUrl!.isNotEmpty
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: AspectRatio(
+                                  aspectRatio: 1.2,
                                   child: CachedNetworkImage(
                                     imageUrl: item.imageUrl!,
-                                    width: 48,
-                                    height: 48,
                                     fit: BoxFit.cover,
                                     placeholder: (_, __) => Container(
-                                      width: 48,
-                                      height: 48,
                                       color: Colors.grey.shade200,
                                       child: const Center(
-                                          child: SizedBox(
-                                              width: 16,
-                                              height: 16,
-                                              child: CircularProgressIndicator(
-                                                  strokeWidth: 2))),
+                                        child: SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(strokeWidth: 2),
+                                        ),
+                                      ),
                                     ),
                                     errorWidget: (_, __, ___) => Container(
-                                      width: 48,
-                                      height: 48,
                                       color: Colors.grey.shade200,
-                                      child: const Icon(Icons.broken_image,
-                                          size: 20),
+                                      child: const Icon(Icons.broken_image, size: 20),
                                     ),
                                   ),
-                                )
-                              : Container(
-                                  width: 48,
-                                  height: 48,
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey.shade100,
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Icon(Icons.fastfood,
-                                      color: Colors.grey.shade400),
                                 ),
+                              )
+                            : Container(
+                                width: 56,
+                                height: 56,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(
+                                  Icons.fastfood,
+                                  color: Colors.grey.shade400,
+                                ),
+                              ),
 
-                          // Stok switch'i
-                          title: Text(item.name),
-                          subtitle: Text(
-                              '${item.categoryName}  •  ₺${item.price.toStringAsFixed(2)}'
-                              '${item.isActive ? '' : '  •  Pasif'}'),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              // Stok durumu switch
-                              Switch(
-                                value: item.isAvailable,
-                                onChanged: (val) =>
-                                    _toggleAvailability(item, val),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.edit),
-                                onPressed: () =>
-                                    _showForm(context, existing: item),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete,
-                                    color: Colors.red),
-                                onPressed: () => _confirmDelete(item),
-                              ),
-                            ],
+                        // ── TITLE ─────────────────────────────────────────────
+                        title: Text(
+                          item.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+
+                        // ── SUBTITLE ──────────────────────────────────────────
+                        subtitle: Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            '${item.categoryName}  •  ₺${item.price.toStringAsFixed(2)}'
+                            '${item.isActive ? '' : '  •  Pasif'}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                      );
-                    },
+
+                        // ── ACTIONS ───────────────────────────────────────────
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Switch(
+                              value: item.isAvailable,
+                              onChanged: (val) => _toggleAvailability(item, val),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.edit),
+                              onPressed: () => _showForm(context, existing: item),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              onPressed: () => _confirmDelete(item),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );                    },
                   );
                 },
               ),
