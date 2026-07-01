@@ -134,6 +134,7 @@ builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();
 builder.Services.AddScoped<IIyzicoSubMerchantService, IyzicoSubMerchantService>();
+builder.Services.AddScoped<IImageUploadService, CloudinaryImageUploadService>();
 //
 // ── Build ────────────────────────────────────────────────────────────────────────
 //
