@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 import '../config/app_config.dart';
 import '../storage/token_storage.dart';
@@ -127,4 +129,17 @@ class ApiClient {
       throw ApiException.fromDioError(e);
     }
   }
+
+Future<String> uploadImage(Uint8List bytes, String fileName) async {
+  final formData = FormData.fromMap({
+    'file': MultipartFile.fromBytes(
+      bytes,
+      filename: fileName,
+    ),
+  });
+
+  final res = await dio.post('/images/menu-item', data: formData);
+
+  return res.data['url'] as String;
+}
 }
