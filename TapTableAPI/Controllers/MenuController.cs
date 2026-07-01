@@ -8,7 +8,7 @@ namespace TapTable.Api.Controllers;
 
 [ApiController]
 [Route("api/menu")]
-[Authorize(Roles = "Admin")]
+[Authorize]
 public class MenuController : ControllerBase
 {
     private readonly IMenuService _menuService;
