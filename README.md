@@ -1,43 +1,48 @@
-# 🍽️ TapTable
+# 🧑‍💼 TapTable Staff Panel
 
-TapTable is a modern **QR-based restaurant ordering, table management, and payment system** designed to digitize and streamline restaurant operations. It connects customers, waiters, kitchen staff, and restaurant owners in a single real-time ecosystem.
+TapTable Staff Panel is the operational management system of **TapTable**, built for **waiters, kitchen staff, and restaurant administrators**. It provides real-time control over restaurant operations including **table management, order tracking, menu updates, and service coordination**.
+
+The system helps restaurant teams reduce delays, minimize order mistakes, and improve service efficiency through a centralized dashboard.
 
 ---
 
 ## 🚀 Project Overview
 
-TapTable replaces traditional restaurant workflows with a **fully digital, real-time system**:
+The Staff Panel digitizes restaurant operations by replacing manual workflows with a **real-time management dashboard**.
 
-- Customers scan a QR code to access the menu
-- Orders are placed directly from mobile/web
-- Staff manages orders via admin and kitchen panels
-- Payments are handled securely via Stripe
-- All updates are synchronized in real-time
+Staff members can:
+
+* Monitor incoming orders instantly
+* Manage table occupancy and status
+* Update menu items and availability
+* Coordinate between waiters and kitchen staff
+* Track order progress from creation to delivery
+
+All data is synchronized in real time to ensure seamless restaurant operations.
 
 ---
 
 ## 🎯 Goals
 
 ### Short Term
-- QR menu & ordering system
-- Staff/admin dashboard
-- Basic Stripe payment integration
-- Table-based order tracking
+
+* Real-time order management
+* Table status monitoring
+* Kitchen order tracking
+* Menu management tools
 
 ### Long Term
-- Multi-tenant SaaS architecture
-- AI-based recommendation system
-- Advanced analytics dashboard
-- Loyalty & promotion system
-- Scalable restaurant network support
+
+* Multi-branch restaurant management
+* Advanced sales analytics
+* Staff performance reporting
+* AI-powered demand forecasting
+
 ---
 
 ## 🧩 System Architecture
 
-TapTable follows a **modular, scalable client-server architecture**:
-
 ```text
-📱 Customer App (Flutter)
 🧑‍💼 Staff Panel (Flutter Web)
             │
             ▼
@@ -48,162 +53,160 @@ TapTable follows a **modular, scalable client-server architecture**:
             │
             ▼
 ⚡ Realtime Layer (SignalR)
-            │
-            ▼
-💳 Payment Gateway (Stripe)
 ```
+
 ---
 
 ## 🏗️ Architecture Layers
 
 ### 🔹 Frontend
-- Flutter (Mobile + Web)
-- Responsive UI for customers and staff
+
+* Flutter Web
+* Responsive dashboard UI
+* Drag & drop table layout editor
 
 ### 🔹 Backend
-- ASP.NET Core Web API
-- JWT Authentication
-- Order, menu, and table management
+
+* ASP.NET Core Web API
+* Role-based authorization
+* Business logic & operations
 
 ### 🔹 Realtime Communication
-- SignalR
-- Live order updates & status sync
 
-### 🔹 Payment System
-- Stripe Integration
-- Payment Intent + Webhook flow
-- Apple Pay / Google Pay support
+* SignalR
+* Live order synchronization
+* Instant table status updates
 
 ---
 
 ## 👥 User Roles
 
-- 👤 Customer → Scan QR, order, pay
-- 🧑‍🍳 Waiter → Manage and update orders
-- 👨‍💼 Admin → Manage restaurant, menu, tables, reports
-- 🍳 Kitchen → Track and prepare orders
+### 🧑‍🍳 Waiter
+
+* View active tables
+* Create/update orders
+* Manage customer requests
+
+### 🍳 Kitchen Staff
+
+* View incoming orders
+* Update preparation status
+* Mark orders ready
+
+### 👨‍💼 Admin
+
+* Manage restaurant settings
+* Configure tables/layouts
+* Manage menu items
+* View analytics and reports
 
 ---
 
 ## 📱 Features
 
-### Customer App
-- QR code scanning
-- Digital menu browsing
-- Cart & order creation
-- Real-time order tracking
-- Stripe payment integration
+### Order Management
 
-### Staff System
-- Order management dashboard
-- Kitchen screen (real-time orders)
-- Table management (drag & drop layout)
-- Menu management
-- Sales reports
+* Live incoming orders
+* Order status updates
+* Order detail tracking
+
+### Table Management
+
+* Table layout editor
+* Drag & drop positioning
+* Occupancy tracking
+* Capacity management
+
+### Menu Management
+
+* Add/edit/remove menu items
+* Category management
+* Availability toggles
+
+### Reporting
+
+* Sales tracking
+* Order analytics
+* Revenue insights
 
 ---
 
 ## ⚙️ Core Modules
 
-- Authentication (JWT)
-- Order Management System
-- Menu Management
-- Table Management System
-- Payment Processing (Stripe)
-- Real-time updates (SignalR)
+* Authentication & Authorization
+* Order Management System
+* Table Layout System
+* Menu Management
+* Kitchen Workflow
+* Real-time Sync
 
 ---
 
 ## 🗄️ Database Structure
 
-- Users
-- Roles
-- Tables
-- TableLayouts
-- Orders
-- OrderItems
-- MenuItems
-- Payments
-- Categories
+* Users
+* Roles
+* Tables
+* TableLayouts
+* Orders
+* OrderItems
+* MenuItems
+* Categories
 
 ---
 
 ## 🔌 API Endpoints (Sample)
 
-### Auth
-- `POST /auth/login`
-- `POST /auth/register`
-
 ### Orders
-- `POST /orders`
-- `GET /orders/{id}`
-- `PUT /orders/status`
 
-### Menu
-- `GET /menu`
-- `POST /menu`
-
-### Payments
-- `POST /payments/create-intent`
-- `POST /payments/webhook`
+* `GET /orders`
+* `PUT /orders/status`
 
 ### Tables
-- `GET /tables`
-- `POST /tables`
+
+* `GET /tables`
+* `POST /tables`
+* `PUT /tables/layout`
+
+### Menu
+
+* `GET /menu`
+* `POST /menu`
+* `PUT /menu`
 
 ---
 
 ## 📊 KPIs
 
-- ⏱️ 40% faster order processing
-- ❌ 70% fewer order errors
-- 📈 Increased staff efficiency
-- 💬 Improved customer satisfaction
-- ⚡ Reduced average service time
+* ⏱️ Faster service workflow
+* ❌ Fewer order mistakes
+* 📈 Better staff productivity
+* ⚡ Improved operational efficiency
 
 ---
 
 ## 🧪 Tech Stack
 
 ### Frontend
-- Flutter
-- Dart
-- Flutter Web
+
+* Flutter Web
+* Dart
 
 ### Backend
-- ASP.NET Core Web API
-- C#
 
-### Realtime
-- SignalR
+* ASP.NET Core
+* C#
 
 ### Database
-- SQL Server / PostgreSQL
-- Entity Framework Core
 
-### Payment
-- Stripe API
+* SQL Server / PostgreSQL
 
----
+### Realtime
 
-## 🛣️ Roadmap
-
-- [x] QR Menu System
-- [x] Order Management
-- [x] Staff Dashboard
-- [ ] Multi-restaurant SaaS support
-- [ ] AI recommendation system
-- [ ] Loyalty program module
-- [ ] Advanced analytics dashboard
+* SignalR
 
 ---
 
 ## 📌 Status
 
 🚧 In Development
-
----
-
-## 📄 License
-
-This project is currently private / in development phase.
