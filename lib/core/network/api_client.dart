@@ -130,16 +130,24 @@ class ApiClient {
     }
   }
 
-Future<String> uploadImage(Uint8List bytes, String fileName) async {
-  final formData = FormData.fromMap({
-    'file': MultipartFile.fromBytes(
-      bytes,
-      filename: fileName,
-    ),
-  });
+  Future<String> uploadImage(Uint8List bytes, String fileName) async {
+    final formData = FormData.fromMap({
+      'file': MultipartFile.fromBytes(
+        bytes,
+        filename: fileName,
+      ),
+    });
 
-  final res = await dio.post('/images/menu-item', data: formData);
+    final res = await dio.post('/images/menu-item', data: formData);
 
-  return res.data['url'] as String;
-}
+    return res.data['url'] as String;
+  }
+  
+  Future<void> deleteImage(String url) async {
+    try {
+      await dio.delete('/images', data: {'url': url});
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
 }

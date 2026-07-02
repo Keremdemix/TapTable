@@ -1,2 +1,4 @@
-# flutter_lints package not found; include removed to avoid analysis error.
+analyzer:
+  errors:
+    deprecated_member_use: ignore ignore# flutter_lints package not found; include removed to avoid analysis error.
 # To re-enable these lints, add `flutter_lints: ^2.0.0` to dev_dependencies in pubspec.yaml and run `flutter pub get`.

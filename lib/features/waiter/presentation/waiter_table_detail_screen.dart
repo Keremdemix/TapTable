@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../orders/application/order_providers.dart';
 import '../../orders/data/order_models.dart';
-import '../../tables/data/table_models.dart';
 import 'waiter_item_picker_screen.dart';
 import 'waiter_payment_screen.dart';
 
