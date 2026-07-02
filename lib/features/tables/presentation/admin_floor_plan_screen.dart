@@ -16,13 +16,12 @@ class _DragState {
   final int tableId;
   final Offset startPointer;
   final Offset startPosition;
-  bool moved;
+  bool moved = false;
 
   _DragState({
     required this.tableId,
     required this.startPointer,
     required this.startPosition,
-    this.moved = false,
   });
 }
 
@@ -68,12 +67,6 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
     });
   }
 
-  (String, Color) _statusInfo(TableStatus status) => switch (status) {
-        TableStatus.available => ('Müsait', Colors.green),
-        TableStatus.occupied => ('Dolu', Colors.orange),
-        TableStatus.reserved => ('Rezerve', Colors.blue),
-        TableStatus.outOfService => ('Kapalı', Colors.grey),
-      };
 
   // ─── Pozisyon güncelleme ─────────────────────────────────────────────────────
 

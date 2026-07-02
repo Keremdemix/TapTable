@@ -1,8 +1,6 @@
 import 'dart:typed_data';
-import 'dart:ui';
 
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:crop_your_image/crop_your_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -249,6 +247,9 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
     bool imageUploading = false; // sadece kırpma/indirme için loading; asıl upload Kaydet'te
 
     final apiClient = ref.read(apiClientProvider);
+    // Dialog açıldığındaki orijinal görsel — Kaydet'te değiştirildi/kaldırıldı mı
+    // diye kıyaslamak ve eskisini Cloudinary'den silmek için saklanıyor.
+    final originalImageUrl = existing?.imageUrl;
 
     await showDialog(
       context: context,
@@ -359,7 +360,7 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
                   children: [
                     // Kategori seçimi
                     DropdownButtonFormField<int>(
-                      value: selectedCategoryId,
+                      initialValue: selectedCategoryId,
                       decoration: const InputDecoration(labelText: 'Kategori'),
                       items: categories
                           .map((c) => DropdownMenuItem(
@@ -650,6 +651,17 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
                           }
                           ref.invalidate(menuItemsProvider);
                           ref.invalidate(categoriesProvider);
+
+                          // Eski görsel değiştirildiyse ya da kaldırıldıysa
+                          // Cloudinary'deki eski dosyayı sil (fire-and-forget).
+                          if (originalImageUrl != null &&
+                              originalImageUrl.isNotEmpty &&
+                              originalImageUrl != imgUrl) {
+                            apiClient.deleteImage(originalImageUrl).catchError((_) {
+                              // Silme başarısız olsa bile kullanıcı akışını bozma
+                            });
+                          }
+
                           if (dialogContext.mounted) {
                             Navigator.pop(dialogContext);
                           }
@@ -694,6 +706,13 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
       await ref.read(menuRepositoryProvider).deleteItem(item.id);
       ref.invalidate(menuItemsProvider);
       ref.invalidate(categoriesProvider);
+
+      // Ürünle birlikte görseli de Cloudinary'den temizle (fire-and-forget).
+      if (item.imageUrl != null && item.imageUrl!.isNotEmpty) {
+        ref.read(apiClientProvider).deleteImage(item.imageUrl!).catchError((_) {
+          // Görsel silinemese bile ürün silme işlemi tamamlandı sayılır
+        });
+      }
     } on ApiException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)

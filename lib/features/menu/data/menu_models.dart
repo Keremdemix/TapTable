@@ -28,7 +28,7 @@ class MenuItemResponseDto with _$MenuItemResponseDto {
     required String categoryName,
     required String name,
     String? description,
-    @JsonKey(fromJson: _toDouble) required double price,
+    required double price,
     String? imageUrl,
     required bool isAvailable,
     required bool isActive,

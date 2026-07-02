@@ -16,7 +16,7 @@ class PaymentResponseDto with _$PaymentResponseDto {
   const factory PaymentResponseDto({
     required int id,
     required int orderId,
-    @JsonKey(fromJson: _toDouble) required double amount,
+    required double amount,
     required String method,
     required String splitType,
     required String status,
