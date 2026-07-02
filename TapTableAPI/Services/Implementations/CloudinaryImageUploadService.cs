@@ -7,8 +7,11 @@ namespace TapTable.Api.Services.Implementations;
 public class CloudinaryImageUploadService : IImageUploadService
 {
     private readonly Cloudinary _cloudinary;
+    private readonly ILogger<CloudinaryImageUploadService> _logger;
 
-    public CloudinaryImageUploadService(IConfiguration configuration)
+    public CloudinaryImageUploadService(
+        IConfiguration configuration,
+        ILogger<CloudinaryImageUploadService> logger)
     {
         var account = new Account(
             configuration["Cloudinary:CloudName"],
@@ -16,6 +19,7 @@ public class CloudinaryImageUploadService : IImageUploadService
             configuration["Cloudinary:ApiSecret"]
         );
         _cloudinary = new Cloudinary(account) { Api = { Secure = true } };
+        _logger = logger;
     }
 
     public async Task<string> UploadAsync(IFormFile file, string folder)
@@ -37,9 +41,9 @@ public class CloudinaryImageUploadService : IImageUploadService
             Folder = $"taptable/{folder}",
             Transformation = new Transformation()
                 .Width(800).Height(800)
-                .Crop("limit")          // orijinal oranı koru, max 800x800
-                .Quality("auto")        // Cloudinary otomatik kalite optimizasyonu
-                .FetchFormat("webp"),   // WebP'ye dönüştür (daha küçük boyut)
+                .Crop("limit")
+                .Quality("auto")
+                .FetchFormat("webp"),
             UseFilename = false,
             UniqueFilename = true,
             Overwrite = false
@@ -58,6 +62,73 @@ public class CloudinaryImageUploadService : IImageUploadService
         if (string.IsNullOrWhiteSpace(publicId)) return;
 
         var deleteParams = new DeletionParams(publicId);
-        await _cloudinary.DestroyAsync(deleteParams);
+        var result = await _cloudinary.DestroyAsync(deleteParams);
+
+        if (result.Result != "ok" && result.Result != "not found")
+        {
+            _logger.LogWarning(
+                "Cloudinary silme başarısız. PublicId: {PublicId}, Sonuç: {Result}",
+                publicId, result.Result);
+        }
+    }
+
+    /// <summary>
+    /// Cloudinary secure URL'inden public_id çıkarıp siler.
+    /// restaurantId verilirse, URL'nin o restorana ait olup olmadığını doğrular
+    /// (başka bir restoranın görselinin yanlışlıkla silinmesini önler).
+    /// </summary>
+    public async Task<bool> DeleteByUrlAsync(string url, int? restaurantId = null)
+    {
+        var publicId = ExtractPublicId(url);
+        if (publicId is null)
+        {
+            _logger.LogWarning("Public ID çıkarılamadı. URL: {Url}", url);
+            return false;
+        }
+
+        if (restaurantId is not null &&
+            !publicId.Contains($"restaurants/{restaurantId}/", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning(
+                "Yetkisiz silme girişimi engellendi. RestaurantId: {RestaurantId}, PublicId: {PublicId}",
+                restaurantId, publicId);
+            return false;
+        }
+
+        await DeleteAsync(publicId);
+        return true;
+    }
+
+    private static string? ExtractPublicId(string url)
+    {
+        try
+        {
+            var uri = new Uri(url);
+            var segments = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+
+            var uploadIndex = Array.IndexOf(segments, "upload");
+            if (uploadIndex == -1 || uploadIndex + 1 >= segments.Length)
+                return null;
+
+            var rest = segments.Skip(uploadIndex + 1).ToArray();
+
+            // Versiyon segmentini atla (v1234567890)
+            if (rest.Length > 0 && rest[0].Length > 1 && rest[0][0] == 'v' &&
+                rest[0][1..].All(char.IsDigit))
+            {
+                rest = rest.Skip(1).ToArray();
+            }
+
+            var path = string.Join('/', rest);
+
+            var lastDot = path.LastIndexOf('.');
+            if (lastDot > -1) path = path[..lastDot];
+
+            return string.IsNullOrWhiteSpace(path) ? null : path;
+        }
+        catch
+        {
+            return null;
+        }
     }
 }
