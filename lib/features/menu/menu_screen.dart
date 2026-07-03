@@ -1,8 +1,10 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tap_table_customer/features/cart/cart_models.dart';
 import 'package:tap_table_customer/features/cart/cart_provider.dart';
 import 'package:tap_table_customer/features/cart/cart_screen.dart';
+import 'package:tap_table_customer/features/orders/order_provider.dart';
 import '../../core/session/session_provider.dart';
 import 'menu_models.dart';
 import 'menu_provider.dart';
@@ -41,31 +43,113 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
     return Scaffold(
       bottomNavigationBar: Consumer(
         builder: (context, ref, _) {
-          final count = ref.watch(cartCountProvider);
-          final total = ref.watch(cartTotalProvider);
-          if (count == 0) return const SizedBox.shrink();
+          final cartLines = ref.watch(cartProvider).values.toList();
+          final newTotal = ref.watch(cartTotalProvider);
+          final activeOrderAsync = ref.watch(activeOrderProvider);
+          final primary = Theme.of(context).colorScheme.primary;
+
+          final order = activeOrderAsync.when(
+            data: (o) => o,
+            loading: () => null,
+            error: (_, __) => null,
+          );
+
+          final hasPrevious = order != null && order.items.isNotEmpty;
+          final hasNew = cartLines.isNotEmpty;
+
+          if (!hasPrevious && !hasNew) return const SizedBox.shrink();
+
+          final previousCount = hasPrevious
+              ? order.items.fold<int>(0, (sum, i) => sum + i.quantity)
+              : 0;
+          final previousTotal = hasPrevious
+              ? order.items.fold<double>(0, (sum, i) => sum + i.lineTotal)
+              : 0.0;
+          final grandTotal = previousTotal + newTotal;
 
           return SafeArea(
             child: Container(
               margin: const EdgeInsets.all(12),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary,
-                borderRadius: BorderRadius.circular(14),
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
-              child: Row(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('$count ürün', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-                  const Spacer(),
-                  Text('₺${total.toStringAsFixed(2)}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-                  const SizedBox(width: 12),
-                  TextButton(
-                    style: TextButton.styleFrom(backgroundColor: Colors.white24, foregroundColor: Colors.white),
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const CartScreen()),
+                  if (hasPrevious)
+                    _BottomBarSummaryRow(
+                      icon: Icons.check,
+                      iconBg: Colors.grey.shade400,
+                      label: 'Onaylanan: $previousCount ürün',
+                      amount: previousTotal,
+                      labelColor: Colors.grey.shade700,
                     ),
-                    child: const Text('Sepeti Gör'),
+                  if (hasPrevious && hasNew) const SizedBox(height: 8),
+                  if (hasNew)
+                    _NewItemsRow(
+                      lines: cartLines,
+                      total: newTotal,
+                      primary: primary,
+                    ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Divider(height: 1, color: Colors.grey.shade200),
+                  ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'TOPLAM TUTAR',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.grey.shade600,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '₺${grandTotal.toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 18,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: primary,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 14),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14)),
+                        ),
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const CartScreen()),
+                        ),
+                        icon: const Icon(Icons.shopping_bag, size: 18),
+                        label: const Text(
+                          'Sepete Git',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w700, fontSize: 14),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -144,6 +228,202 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+/// cart_screen'deki "Onaylanan / Yeni" satır tasarımı ile aynı mantıkta
+/// küçük ikon + etiket + tutar satırı.
+class _BottomBarSummaryRow extends StatelessWidget {
+  final IconData icon;
+  final Color iconBg;
+  final String label;
+  final double amount;
+  final Color labelColor;
+
+  const _BottomBarSummaryRow({
+    required this.icon,
+    required this.iconBg,
+    required this.label,
+    required this.amount,
+    required this.labelColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(color: iconBg, shape: BoxShape.circle),
+          child: Icon(icon, size: 12, color: Colors.white),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+                fontWeight: FontWeight.w600, fontSize: 13, color: labelColor),
+          ),
+        ),
+        Text(
+          '₺${amount.toStringAsFixed(2)}',
+          style: TextStyle(
+              fontWeight: FontWeight.w700, fontSize: 13, color: labelColor),
+        ),
+      ],
+    );
+  }
+}
+
+/// "Yeni" satırı: eklenen ürünlerin küçük resimlerini yatayda kaydırılabilir
+/// şekilde gösterir. Çok sayıda farklı ürün eklendiğinde satır sabit
+/// yükseklikte kalır, ürünler soldan sağa kaydırılarak görülür.
+class _NewItemsRow extends StatelessWidget {
+  final List<CartLine> lines;
+  final double total;
+  final Color primary;
+
+  const _NewItemsRow({
+    required this.lines,
+    required this.total,
+    required this.primary,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Center(
+          child: Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: primary,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.add,
+              size: 12,
+              color: Colors.white,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: SizedBox(
+            height:70,
+            child: Center(
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                itemCount: lines.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 6),
+                itemBuilder: (context, index) => _NewItemThumb(line: lines[index]),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          '₺${total.toStringAsFixed(2)}',
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: primary),
+        ),
+      ],
+    );
+  }
+}
+
+class _NewItemThumb extends StatelessWidget {
+  final CartLine line;
+  const _NewItemThumb({required this.line});
+
+  @override
+  Widget build(BuildContext context) {
+    final hasImage =
+        line.item.imageUrl != null && line.item.imageUrl!.isNotEmpty;
+
+    return SizedBox(
+      width: 64,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: hasImage
+                    ? CachedNetworkImage(
+                        imageUrl: line.item.imageUrl!,
+                        width: 52,
+                        height: 52,
+                        fit: BoxFit.cover,
+                        placeholder: (_, __) => Container(
+                          width: 52,
+                          height: 52,
+                          color: Colors.grey.shade200,
+                        ),
+                        errorWidget: (_, __, ___) => Container(
+                          width: 52,
+                          height: 52,
+                          color: Colors.grey.shade200,
+                          child: const Icon(
+                            Icons.fastfood,
+                            size: 22,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      )
+                    : Container(
+                        width: 52,
+                        height: 52,
+                        color: Colors.grey.shade200,
+                        child: const Icon(
+                          Icons.fastfood,
+                          size: 22,
+                          color: Colors.grey,
+                        ),
+                      ),
+              ),
+              if (line.quantity > 1)
+                Positioned(
+                  right: -5,
+                  top: -5,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: Colors.deepOrange,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.white, width: 1.5),
+                    ),
+                    constraints: const BoxConstraints(minWidth: 16),
+                    child: Text(
+                      '${line.quantity}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            line.item.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
       ),
     );
   }

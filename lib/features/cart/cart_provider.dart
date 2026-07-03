@@ -25,6 +25,11 @@ class CartNotifier extends StateNotifier<Map<int, CartLine>> {
       state = {...state, itemId: existing.copyWith(quantity: existing.quantity - 1)};
     }
   }
+ 
+  void remove(int itemId) {
+  final next = {...state}..remove(itemId);
+  state = next;
+}
 
   void clear() => state = {};
 
