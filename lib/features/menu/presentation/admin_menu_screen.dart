@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:tap_table_staff/features/menu/presentation/widgets/crop_dialog.dart';
+import 'package:tap_table_staff/features/branding/presentation/menu_design_settings_screen.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/providers.dart';
 import '../application/menu_providers.dart';
@@ -21,6 +22,17 @@ class AdminMenuScreen extends StatelessWidget {
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Menü'),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.palette_outlined),
+              tooltip: 'Tasarım Ayarları',
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const MenuDesignSettingsScreen()),
+              ),
+            ),
+          ],
           bottom: const TabBar(
             tabs: [Tab(text: 'Kategoriler'), Tab(text: 'Ürünler')],
           ),

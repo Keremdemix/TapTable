@@ -4,7 +4,13 @@ import 'package:flutter/material.dart';
 
 class CropDialog extends StatefulWidget {
   final Uint8List imageBytes;
-  const CropDialog({required this.imageBytes});
+  final double aspectRatio;
+
+  const CropDialog({
+    super.key,
+    required this.imageBytes,
+    this.aspectRatio = 1.2,
+  });
 
   @override
   State<CropDialog> createState() => _CropDialogState();
@@ -45,7 +51,7 @@ class _CropDialogState extends State<CropDialog> {
             child: Crop(
               image: widget.imageBytes,
               controller: _controller,
-              aspectRatio: 1.2,
+              aspectRatio: widget.aspectRatio,
               onStatusChanged: (status) {
                 setState(() => _isCropping = status == CropStatus.cropping);
               },

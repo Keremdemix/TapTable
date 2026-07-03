@@ -150,4 +150,31 @@ class ApiClient {
       throw ApiException.fromDioError(e);
     }
   }
+  
+  Future<void> updateRestaurantBranding({
+    required int restaurantId,
+    required String primaryColorHex,
+    required String accentColorHex,
+    Uint8List? logoBytes,
+    String? logoFileName,
+    bool removeLogo = false,
+  }) async {
+    final formMap = <String, dynamic>{
+      'primaryColorHex': primaryColorHex,
+      'accentColorHex': accentColorHex,
+      'removeLogo': removeLogo,
+    };
+
+    if (logoBytes != null && logoFileName != null) {
+      formMap['logo'] = MultipartFile.fromBytes(logoBytes, filename: logoFileName);
+    }
+
+    final formData = FormData.fromMap(formMap);
+
+    try {
+      await dio.put('/restaurants/$restaurantId/branding', data: formData);
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
 }
