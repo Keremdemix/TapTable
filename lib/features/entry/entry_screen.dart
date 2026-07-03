@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:tap_table_customer/theme/restaurant_theme.dart';
 import '../../core/session/session_provider.dart';
 import '../menu/menu_screen.dart';

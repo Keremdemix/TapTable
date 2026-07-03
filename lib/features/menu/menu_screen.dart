@@ -1,6 +1,8 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tap_table_customer/features/cart/cart_provider.dart';
+import 'package:tap_table_customer/features/cart/cart_screen.dart';
 import '../../core/session/session_provider.dart';
 import 'menu_models.dart';
 import 'menu_provider.dart';
@@ -37,6 +39,40 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
     final menuAsync = ref.watch(publicMenuProvider);
 
     return Scaffold(
+      bottomNavigationBar: Consumer(
+        builder: (context, ref, _) {
+          final count = ref.watch(cartCountProvider);
+          final total = ref.watch(cartTotalProvider);
+          if (count == 0) return const SizedBox.shrink();
+
+          return SafeArea(
+            child: Container(
+              margin: const EdgeInsets.all(12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                children: [
+                  Text('$count ürün', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                  const Spacer(),
+                  Text('₺${total.toStringAsFixed(2)}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                  const SizedBox(width: 12),
+                  TextButton(
+                    style: TextButton.styleFrom(backgroundColor: Colors.white24, foregroundColor: Colors.white),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const CartScreen()),
+                    ),
+                    child: const Text('Sepeti Gör'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
       body: menuAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, _) => Center(child: Text('Menü yüklenemedi: $err')),
@@ -165,13 +201,16 @@ class _CategoryBarDelegate extends SliverPersistentHeaderDelegate {
   }
 }
 
-class _MenuItemCard extends StatelessWidget {
+class _MenuItemCard extends ConsumerWidget {
   final PublicMenuItem item;
   const _MenuItemCard({required this.item});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final accent = Theme.of(context).colorScheme.secondary;
+    final quantity = ref.watch(
+      cartProvider.select((cart) => cart[item.id]?.quantity ?? 0),
+    );
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -198,11 +237,7 @@ class _MenuItemCard extends StatelessWidget {
                 width: 84,
                 height: 84,
                 fit: BoxFit.cover,
-                placeholder: (_, __) => Container(
-                  width: 84,
-                  height: 84,
-                  color: Colors.grey.shade100,
-                ),
+                placeholder: (_, __) => Container(width: 84, height: 84, color: Colors.grey.shade100),
                 errorWidget: (_, __, ___) => Container(
                   width: 84,
                   height: 84,
@@ -242,24 +277,20 @@ class _MenuItemCard extends StatelessWidget {
                   children: [
                     Text(
                       '₺${item.price.toStringAsFixed(2)}',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: accent,
-                        fontSize: 15,
-                      ),
+                      style: TextStyle(fontWeight: FontWeight.w700, color: accent, fontSize: 15),
                     ),
-                    FilledButton.icon(
-                      onPressed: () {
-                        // Sepete ekleme — bir sonraki adımda cart_provider'a bağlanacak
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('${item.name} sepete eklendi'),
-                            duration: const Duration(seconds: 1),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.add, size: 16),
-                      label: const Text('Ekle'),
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 200),
+                      transitionBuilder: (child, anim) =>
+                          ScaleTransition(scale: anim, child: child),
+                      child: quantity == 0
+                          ? FilledButton.icon(
+                              key: const ValueKey('add'),
+                              onPressed: () => ref.read(cartProvider.notifier).add(item),
+                              icon: const Icon(Icons.add, size: 16),
+                              label: const Text('Ekle'),
+                            )
+                          : _QuantityStepper(key: const ValueKey('stepper'), item: item, quantity: quantity),
                     ),
                   ],
                 ),
@@ -267,6 +298,63 @@ class _MenuItemCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _QuantityStepper extends ConsumerWidget {
+  final PublicMenuItem item;
+  final int quantity;
+  const _QuantityStepper({super.key, required this.item, required this.quantity});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final accent = Theme.of(context).colorScheme.secondary;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: accent,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _StepperButton(
+            icon: Icons.remove,
+            onTap: () => ref.read(cartProvider.notifier).decrement(item.id),
+          ),
+          SizedBox(
+            width: 22,
+            child: Text(
+              '$quantity',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14),
+            ),
+          ),
+          _StepperButton(
+            icon: Icons.add,
+            onTap: () => ref.read(cartProvider.notifier).add(item),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StepperButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const _StepperButton({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Icon(icon, size: 16, color: Colors.white),
       ),
     );
   }
