@@ -1,5 +1,4 @@
-﻿using TapTable.Api.DTOs.Qr;
-using TapTable.Api.DTOs.Request.Qr;
+﻿using TapTable.Api.DTOs.Request.Qr;
 
 public interface IQrSessionService
 {
