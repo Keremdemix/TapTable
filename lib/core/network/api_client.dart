@@ -49,4 +49,16 @@ class ApiClient {
       throw ApiException.fromDioError(e);
     }
   }
+  Future<Map<String, dynamic>> placeOrder({
+    required int tableId,
+    required String sessionKey,
+    required List<Map<String, dynamic>> items,
+    String? note,
+  }) async {
+    return post('/public/orders/$tableId', data: {
+      'sessionKey': sessionKey,
+      'items': items,
+      'note': note,
+    });
+  }
 }
