@@ -1,23 +1,20 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SessionStorage {
-  static const _keySessionKey = 'session_key';
-  static const _keyTableId = 'table_id';
+  static const _keyToken = 'qr_token';
 
-  Future<void> saveSession({required String sessionKey, required int tableId}) async {
+  Future<void> saveToken(String token) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keySessionKey, sessionKey);
-    await prefs.setInt(_keyTableId, tableId);
+    await prefs.setString(_keyToken, token);
   }
 
-  Future<String?> getSessionKey() async {
+  Future<String?> getToken() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_keySessionKey);
+    return prefs.getString(_keyToken);
   }
 
   Future<void> clear() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_keySessionKey);
-    await prefs.remove(_keyTableId);
+    await prefs.remove(_keyToken);
   }
 }

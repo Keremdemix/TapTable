@@ -2,6 +2,7 @@ class OrderItemResponse {
   final int id;
   final int menuItemId;
   final String menuItemName;
+  final String? menuItemImageUrl; // ← eklendi
   final int quantity;
   final double unitPrice;
   final double lineTotal;
@@ -12,6 +13,7 @@ class OrderItemResponse {
     required this.id,
     required this.menuItemId,
     required this.menuItemName,
+    this.menuItemImageUrl, // ← eklendi
     required this.quantity,
     required this.unitPrice,
     required this.lineTotal,
@@ -24,6 +26,7 @@ class OrderItemResponse {
       id: json['id'] as int,
       menuItemId: json['menuItemId'] as int,
       menuItemName: json['menuItemName'] as String,
+      menuItemImageUrl: json['menuItemImageUrl'] as String?, // ← eklendi
       quantity: json['quantity'] as int,
       unitPrice: (json['unitPrice'] as num).toDouble(),
       lineTotal: (json['lineTotal'] as num).toDouble(),
