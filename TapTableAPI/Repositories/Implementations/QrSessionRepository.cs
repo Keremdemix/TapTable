@@ -22,8 +22,12 @@ public class QrSessionRepository : IQrSessionRepository
 
     public async Task<QrSession?> GetBySessionKeyAsync(string sessionKey)
     {
+        if (string.IsNullOrWhiteSpace(sessionKey))
+            return null;
+
         return await _context.QrSessions
-            .FirstOrDefaultAsync(x => x.SessionKey == sessionKey);
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.SessionKey == sessionKey && s.IsActive);
     }
 
     public async Task CreateAsync(QrSession session)

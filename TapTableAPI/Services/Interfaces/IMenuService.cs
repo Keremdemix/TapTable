@@ -18,7 +18,6 @@ public interface IMenuService
     Task<MenuItemResponseDto> UpdateMenuItemAsync(int itemId, int restaurantId, UpdateMenuItemRequestDto request);
     Task<MenuItemResponseDto> SetAvailabilityAsync(int itemId, int restaurantId, bool isAvailable);
     Task DeleteMenuItemAsync(int itemId, int restaurantId);
+    Task<PublicMenuResponseDto> GetPublicMenuByTokenAsync(string token);
 
-    // Müşteri — Public
-    Task<PublicMenuResponseDto> GetPublicMenuByTableAsync(int tableId);
 }

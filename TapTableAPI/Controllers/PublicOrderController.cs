@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using TapTable.Api.DTOs.Request.Order;
+using TapTable.Api.Extensions;
 using TapTable.Api.Services.Interfaces;
 
 namespace TapTable.Api.Controllers;
@@ -15,34 +16,39 @@ public class PublicOrderController : ControllerBase
         _orderService = orderService;
     }
 
-    /// <summary>
-    /// Müşteri sipariş gönderir — aktif sipariş varsa üzerine eklenir
-    /// POST /api/public/orders/{tableId}
-    /// </summary>
-    [HttpPost("{tableId:int}")]
-    public async Task<IActionResult> PlaceOrder(int tableId, [FromBody] PlaceOrderRequestDto request)
+    /// POST /api/public/orders
+    [HttpPost]
+    public async Task<IActionResult> PlaceOrder([FromBody] PlaceOrderRequestDto request)
     {
-        var order = await _orderService.PlaceOrderAsync(tableId, request);
+        var token = Request.GetQrToken();
+        if (string.IsNullOrWhiteSpace(token))
+            return Unauthorized();
+
+        var order = await _orderService.PlaceOrderAsync(token, request);
         return Ok(order);
     }
 
-    /// <summary>
-    /// GET /api/public/orders/{tableId}/active?sessionKey=...
-    /// </summary>
-    [HttpGet("{tableId:int}/active")]
-    public async Task<IActionResult> GetActive(int tableId, [FromQuery] string sessionKey)
+    /// GET /api/public/orders/active
+    [HttpGet("active")]
+    public async Task<IActionResult> GetActive()
     {
-        var order = await _orderService.GetActiveOrderAsync(tableId, sessionKey);
+        var token = Request.GetQrToken();
+        if (string.IsNullOrWhiteSpace(token))
+            return Unauthorized();
+
+        var order = await _orderService.GetActiveOrderAsync(token);
         return Ok(order);
     }
 
-    /// <summary>
-    /// GET /api/public/orders/{tableId}/{orderId}?sessionKey=...
-    /// </summary>
-    [HttpGet("{tableId:int}/{orderId:int}")]
-    public async Task<IActionResult> Track(int tableId, int orderId, [FromQuery] string sessionKey)
+    /// GET /api/public/orders/{orderId}
+    [HttpGet("{orderId:int}")]
+    public async Task<IActionResult> Track(int orderId)
     {
-        var order = await _orderService.TrackOrderAsync(tableId, sessionKey, orderId);
+        var token = Request.GetQrToken();
+        if (string.IsNullOrWhiteSpace(token))
+            return Unauthorized();
+
+        var order = await _orderService.TrackOrderAsync(token, orderId);
         return Ok(order);
     }
 }

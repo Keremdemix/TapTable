@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using TapTable.Api.Extensions;
 using TapTable.Api.Services.Interfaces;
 
 namespace TapTable.Api.Controllers;
@@ -15,14 +16,18 @@ public class CustomerController : ControllerBase
     }
 
     /// <summary>
-    /// Flutter uygulaması QR'dan gelen tableId ile bu endpoint'i çağırır.
-    /// Dönen sessionKey, sonraki tüm public çağrılarda (menü, sipariş, ödeme) kullanılır.
-    /// GET /api/public/customer/session/{tableId}
+    /// Flutter uygulaması açılışta bu endpoint'i çağırır — token header'dan
+    /// (Authorization: Bearer / X-QR-Token) veya query'den (?token=/?t=) okunur.
+    /// GET /api/public/customer/session
     /// </summary>
-    [HttpGet("session/{tableId:int}")]
-    public async Task<IActionResult> StartSession(int tableId)
+    [HttpGet("session")]
+    public async Task<IActionResult> GetSession()
     {
-        var session = await _customerService.StartSessionAsync(tableId);
+        var token = Request.GetQrToken();
+        if (string.IsNullOrWhiteSpace(token))
+            return Unauthorized();
+
+        var session = await _customerService.ResolveSessionAsync(token);
         return Ok(session);
     }
 }

@@ -12,11 +12,9 @@ public class OrderItemRequestDto
 // Müşteri — QR session ile gönderir
 public class PlaceOrderRequestDto
 {
-    public string SessionKey { get; set; } = null!;
     public List<OrderItemRequestDto> Items { get; set; } = new();
     public string? Note { get; set; }
 }
-
 // Garson — kendisi sisteme girer
 public class StaffCreateOrderRequestDto
 {

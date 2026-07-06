@@ -27,23 +27,23 @@ public class OrderService : IOrderService
 
     // ── Müşteri — Public ─────────────────────────────────────────────────
 
-    public async Task<OrderResponseDto> PlaceOrderAsync(int tableId, PlaceOrderRequestDto request)
+    public async Task<OrderResponseDto> PlaceOrderAsync(string token, PlaceOrderRequestDto request)
     {
-        var table = await ValidateSessionAsync(tableId, request.SessionKey);
+        var table = await ValidateTokenAsync(token);
         var order = await CreateOrAppendOrderAsync(table, waiterId: null, request.Items, request.Note);
         return MapToDto(order);
     }
 
-    public async Task<OrderResponseDto?> GetActiveOrderAsync(int tableId, string sessionKey)
+    public async Task<OrderResponseDto?> GetActiveOrderAsync(string token)
     {
-        var table = await ValidateSessionAsync(tableId, sessionKey);
+        var table = await ValidateTokenAsync(token);
         var order = await _orderRepository.GetActiveOrderByTableAsync(table.Id);
         return order is null ? null : MapToDto(order);
     }
 
-    public async Task<OrderResponseDto> TrackOrderAsync(int tableId, string sessionKey, int orderId)
+    public async Task<OrderResponseDto> TrackOrderAsync(string token, int orderId)
     {
-        var table = await ValidateSessionAsync(tableId, sessionKey);
+        var table = await ValidateTokenAsync(token);
 
         var order = await _orderRepository.GetByIdAsync(orderId, table.RestaurantId)
             ?? throw new KeyNotFoundException($"Sipariş bulunamadı: {orderId}");
@@ -131,26 +131,22 @@ public class OrderService : IOrderService
 
     // ── Helpers ──────────────────────────────────────────────────────────
 
-    private async Task<RestaurantTable> ValidateSessionAsync(int tableId, string sessionKey)
+    private async Task<RestaurantTable> ValidateTokenAsync(string token)
     {
-        if (string.IsNullOrWhiteSpace(sessionKey))
+        if (string.IsNullOrWhiteSpace(token))
             throw new UnauthorizedAccessException("Geçersiz oturum.");
 
-        var session = await _qrSessionRepository.GetActiveByKeyAsync(sessionKey)
+        var session = await _qrSessionRepository.GetActiveByKeyAsync(token)
             ?? throw new UnauthorizedAccessException("Oturum geçersiz veya süresi dolmuş.");
 
-        if (session.TableId != tableId)
-            throw new UnauthorizedAccessException("Oturum bu masaya ait değil.");
-
-        var table = await _tableRepository.GetByIdAsync(tableId)
-            ?? throw new KeyNotFoundException($"Masa bulunamadı: {tableId}");
+        var table = await _tableRepository.GetByIdAsync(session.TableId)
+            ?? throw new KeyNotFoundException($"Masa bulunamadı: {session.TableId}");
 
         if (!table.IsActive)
             throw new InvalidOperationException("Bu masa şu an aktif değil.");
 
         return table;
     }
-
     private async Task<Order> CreateOrAppendOrderAsync(
         RestaurantTable table,
         int? waiterId,
@@ -246,6 +242,7 @@ public class OrderService : IOrderService
             Id = i.Id,
             MenuItemId = i.MenuItemId,
             MenuItemName = i.MenuItem?.Name ?? string.Empty,
+            MenuItemImageUrl = i.MenuItem?.ImageUrl,
             Quantity = i.Quantity,
             UnitPrice = i.UnitPrice,
             LineTotal = i.UnitPrice * i.Quantity,

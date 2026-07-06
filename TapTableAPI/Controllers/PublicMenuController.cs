@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using TapTable.Api.Extensions;
 using TapTable.Api.Services.Interfaces;
 
 namespace TapTable.Api.Controllers;
@@ -14,14 +15,15 @@ public class PublicMenuController : ControllerBase
         _menuService = menuService;
     }
 
-    /// <summary>
-    /// Müşteri QR okuttuğunda menüyü getirir — kimlik doğrulama gerekmez
-    /// GET /api/public/menu/{tableId}
-    /// </summary>
-    [HttpGet("{tableId:int}")]
-    public async Task<IActionResult> GetMenu(int tableId)
+    /// GET /api/public/menu (token: header veya query)
+    [HttpGet]
+    public async Task<IActionResult> GetMenu()
     {
-        var menu = await _menuService.GetPublicMenuByTableAsync(tableId);
+        var token = Request.GetQrToken();
+        if (string.IsNullOrWhiteSpace(token))
+            return Unauthorized();
+
+        var menu = await _menuService.GetPublicMenuByTokenAsync(token);
         return Ok(menu);
     }
 }
