@@ -17,14 +17,12 @@ class ApiClient {
         )) {
     dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
-        // Sadece GET isteklerine sessionKey query param olarak eklenir
-        // (backend GET endpoint'leri sessionKey'i query'den okuyor).
-        // POST body'leri (PlaceOrderRequestDto vb.) sessionKey'i kendi
-        // içinde taşıdığı için burada dokunulmuyor.
-        if (options.method == 'GET') {
-          final sessionKey = await _sessionStorage.getSessionKey();
-          if (sessionKey != null && !options.queryParameters.containsKey('sessionKey')) {
-            options.queryParameters['sessionKey'] = sessionKey;
+        // /public/customer/session hariç tüm isteklere token header'ı eklenir.
+        // O endpoint'in kendi token'ını query'de zaten taşıdığı için hariç tutuluyor.
+        if (!options.path.contains('/customer/session')) {
+          final token = await _sessionStorage.getToken();
+          if (token != null) {
+            options.headers['X-QR-Token'] = token;
           }
         }
         handler.next(options);
@@ -49,16 +47,15 @@ class ApiClient {
       throw ApiException.fromDioError(e);
     }
   }
+
+  Future<Map<String, dynamic>> resolveSession(String token) {
+    return get('/public/customer/session', query: {'token': token});
+  }
+
   Future<Map<String, dynamic>> placeOrder({
-    required int tableId,
-    required String sessionKey,
     required List<Map<String, dynamic>> items,
     String? note,
-  }) async {
-    return post('/public/orders/$tableId', data: {
-      'sessionKey': sessionKey,
-      'items': items,
-      'note': note,
-    });
+  }) {
+    return post('/public/orders', data: {'items': items, 'note': note});
   }
 }

@@ -18,45 +18,39 @@ class _CartScreenState extends ConsumerState<CartScreen> {
   bool _placing = false;
 
   Future<void> _placeOrder() async {
-    final tableId = ref.read(tableIdProvider);
-    final storage = ref.read(sessionStorageProvider);
-    final sessionKey = await storage.getSessionKey();
-    final cart = ref.read(cartProvider);
+  final cart = ref.read(cartProvider);
+  if (cart.isEmpty) return;
 
-    if (tableId == null || sessionKey == null || cart.isEmpty) return;
+  setState(() => _placing = true);
 
-    setState(() => _placing = true);
+  try {
+    await ref.read(apiClientProvider).placeOrder(
+      items: cart.values
+          .map((line) => {
+                'menuItemId': line.item.id,
+                'quantity': line.quantity,
+              })
+          .toList(),
+    );
 
-    try {
-      await ref.read(apiClientProvider).placeOrder(
-        tableId: tableId,
-        sessionKey: sessionKey,
-        items: cart.values
-            .map((line) => {
-                  'menuItemId': line.item.id,
-                  'quantity': line.quantity,
-                })
-            .toList(),
+    ref.read(cartProvider.notifier).clear();
+    ref.invalidate(activeOrderProvider);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Siparişiniz alındı!')),
       );
-
-      ref.read(cartProvider.notifier).clear();
-      ref.invalidate(activeOrderProvider);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Siparişiniz alındı!')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Sipariş gönderilemedi: $e')));
-      }
-    } finally {
-      if (mounted) setState(() => _placing = false);
     }
+  } catch (e) {
+    if (mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Sipariş gönderilemedi: $e')));
+    }
+  } finally {
+    if (mounted) setState(() => _placing = false);
   }
-
+}
+  
   @override
   Widget build(BuildContext context) {
     final cartLines = ref.watch(cartProvider).values.toList();
@@ -163,7 +157,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                                 height: 18,
                                 child: CircularProgressIndicator(
                                     strokeWidth: 2, color: Colors.white),
-                              )
+                              ) 
                             : const Icon(Icons.shopping_bag, size: 18),
                         label: Text(
                           _placing
@@ -317,12 +311,30 @@ class _PreviousOrderTile extends StatelessWidget {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
-            child: Container(
-              width: 64,
-              height: 64,
-              color: Colors.grey.shade300,
-              child: const Icon(Icons.fastfood, color: Colors.white),
-            ),
+            child: item.menuItemImageUrl != null && item.menuItemImageUrl!.isNotEmpty
+                ? CachedNetworkImage(
+                    imageUrl: item.menuItemImageUrl!,
+                    width: 64,
+                    height: 64,
+                    fit: BoxFit.cover,
+                    placeholder: (_, __) => Container(
+                      width: 64,
+                      height: 64,
+                      color: Colors.grey.shade300,
+                    ),
+                    errorWidget: (_, __, ___) => Container(
+                      width: 64,
+                      height: 64,
+                      color: Colors.grey.shade300,
+                      child: const Icon(Icons.fastfood, color: Colors.white),
+                    ),
+                  )
+                : Container(
+                    width: 64,
+                    height: 64,
+                    color: Colors.grey.shade300,
+                    child: const Icon(Icons.fastfood, color: Colors.white),
+                  ),
           ),
           const SizedBox(width: 12),
           Expanded(

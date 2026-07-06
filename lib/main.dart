@@ -9,13 +9,13 @@ void main() {
   print('PATH: ${uri.path}');
   print('QUERY: ${uri.queryParameters}');
 
-  final tableId = int.tryParse(uri.queryParameters['table'] ?? '');
+  final token = uri.queryParameters['token'] ?? uri.queryParameters['t'];
 
   runApp(
     ProviderScope(
       child: MaterialApp(
-        home: tableId != null
-            ? EntryScreen(tableId: tableId)
+        home: (token != null && token.isNotEmpty)
+            ? EntryScreen(token: token)
             : const Scaffold(
                 body: Center(
                   child: Text('QR kod bekleniyor...'),

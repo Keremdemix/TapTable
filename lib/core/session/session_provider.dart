@@ -4,7 +4,7 @@ import 'session_storage.dart';
 
 class CustomerSession {
   final int tableId;
-  final String sessionKey;
+  final int tableNumber;
   final String restaurantName;
   final String? logoUrl;
   final String primaryColorHex;
@@ -12,53 +12,47 @@ class CustomerSession {
 
   CustomerSession({
     required this.tableId,
-    required this.sessionKey,
+    required this.tableNumber,
     required this.restaurantName,
     required this.logoUrl,
     required this.primaryColorHex,
     required this.accentColorHex,
   });
 
-  factory CustomerSession.fromQrResponse(Map<String, dynamic> json) {
-    final restaurant = json['restaurant'] as Map<String, dynamic>;
+  factory CustomerSession.fromJson(Map<String, dynamic> json) {
     return CustomerSession(
       tableId: json['tableId'] as int,
-      sessionKey: json['sessionKey'] as String,
-      restaurantName: restaurant['name'] as String,
-      logoUrl: restaurant['logoUrl'] as String?,
-      primaryColorHex: restaurant['primaryColorHex'] as String,
-      accentColorHex: restaurant['accentColorHex'] as String,
+      tableNumber: json['tableNumber'] as int,
+      restaurantName: json['restaurantName'] as String,
+      logoUrl: json['logoUrl'] as String?,
+      primaryColorHex: json['primaryColorHex'] as String,
+      accentColorHex: json['accentColorHex'] as String,
     );
   }
 }
 
 final sessionStorageProvider = Provider((ref) => SessionStorage());
-
 final apiClientProvider = Provider((ref) => ApiClient(ref.read(sessionStorageProvider)));
 
-/// tableId, uygulama açılışında URL query'sinden okunup buraya set edilir.
-final tableIdProvider = StateProvider<int?>((ref) => null);
+/// URL'deki ?token= (veya ?t=) değeri — uygulama açılışında EntryScreen tarafından set edilir.
+final qrTokenProvider = StateProvider<String?>((ref) => null);
 
 final customerSessionProvider =
     FutureProvider.autoDispose<CustomerSession>((ref) async {
-  final tableId = ref.watch(tableIdProvider);
-  if (tableId == null) {
-    throw Exception('Masa bulunamadı — QR kodu geçersiz.');
-  }
-
-  final apiClient = ref.read(apiClientProvider);
+  final urlToken = ref.watch(qrTokenProvider);
   final storage = ref.read(sessionStorageProvider);
+  final apiClient = ref.read(apiClientProvider);
 
-  Map<String, dynamic> json;
-  try {
-    // Önce aktif session var mı diye bak
-    json = await apiClient.get('/qr/active/$tableId');
-  } catch (_) {
-    // Yoksa yeni session oluştur
-    json = await apiClient.post('/qr/create', data: {'tableId': tableId});
+  // URL'de token varsa onu kullan; yoksa daha önce saklanmış token'a düş
+  // (sayfa yenilenirse token URL'de kalmayabilir).
+  final token = urlToken ?? await storage.getToken();
+
+  if (token == null) {
+    throw Exception('Geçersiz bağlantı — lütfen QR kodu tekrar okutun.');
   }
 
-  final session = CustomerSession.fromQrResponse(json);
-  await storage.saveSession(sessionKey: session.sessionKey, tableId: tableId);
-  return session;
+  final json = await apiClient.resolveSession(token);
+  await storage.saveToken(token);
+
+  return CustomerSession.fromJson(json);
 });

@@ -4,12 +4,7 @@ import 'menu_models.dart';
 
 final publicMenuProvider =
     FutureProvider.autoDispose<PublicMenuResponse>((ref) async {
-  final tableId = ref.watch(tableIdProvider);
-  if (tableId == null) {
-    throw Exception('Masa bulunamadı — QR kodu geçersiz.');
-  }
-
   final apiClient = ref.read(apiClientProvider);
-  final json = await apiClient.get('/public/menu/$tableId');
+  final json = await apiClient.get('/public/menu');
   return PublicMenuResponse.fromJson(json);
 });
