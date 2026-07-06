@@ -294,6 +294,7 @@ class _NewItemsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Center(
           child: Container(
@@ -312,7 +313,7 @@ class _NewItemsRow extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(
           child: SizedBox(
-            height:70,
+            height:100,
             child: Center(
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
@@ -334,17 +335,22 @@ class _NewItemsRow extends StatelessWidget {
   }
 }
 
-class _NewItemThumb extends StatelessWidget {
+class _NewItemThumb extends ConsumerWidget {
   final CartLine line;
-  const _NewItemThumb({required this.line});
+
+  const _NewItemThumb({
+    required this.line,
+  });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final hasImage =
         line.item.imageUrl != null && line.item.imageUrl!.isNotEmpty;
 
+    final primary = Theme.of(context).colorScheme.primary;
+
     return SizedBox(
-      width: 64,
+      width: 72,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -386,17 +392,23 @@ class _NewItemThumb extends StatelessWidget {
                         ),
                       ),
               ),
+
               if (line.quantity > 1)
                 Positioned(
                   right: -5,
                   top: -5,
                   child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 1,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.deepOrange,
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.white, width: 1.5),
+                      border: Border.all(
+                        color: Colors.white,
+                        width: 1.5,
+                      ),
                     ),
                     constraints: const BoxConstraints(minWidth: 16),
                     child: Text(
@@ -412,7 +424,9 @@ class _NewItemThumb extends StatelessWidget {
                 ),
             ],
           ),
+
           const SizedBox(height: 4),
+
           Text(
             line.item.name,
             maxLines: 1,
@@ -420,7 +434,66 @@ class _NewItemThumb extends StatelessWidget {
             textAlign: TextAlign.center,
             style: const TextStyle(
               fontSize: 10,
-              fontWeight: FontWeight.w500,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+
+          const SizedBox(height: 4),
+
+          Container(
+            height: 22,
+            decoration: BoxDecoration(
+              color: primary,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () {
+                    ref
+                        .read(cartProvider.notifier)
+                        .decrement(line.item.id);
+                  },
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 6),
+                    child: Icon(
+                      Icons.remove,
+                      color: Colors.white,
+                      size: 12,
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: 18,
+                  child: Text(
+                    '${line.quantity}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () {
+                    ref
+                        .read(cartProvider.notifier)
+                        .add(line.item);
+                  },
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 6),
+                    child: Icon(
+                      Icons.add,
+                      color: Colors.white,
+                      size: 12,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
