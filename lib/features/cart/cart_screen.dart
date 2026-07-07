@@ -52,123 +52,114 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final cartLines = ref.watch(cartProvider).values.toList();
-    final newItemsTotal = ref.watch(cartTotalProvider);
-    final newItemsCount = ref.watch(cartCountProvider);
-    final activeOrderAsync = ref.watch(activeOrderProvider);
+@override
+Widget build(BuildContext context) {
+  final cartLines = ref.watch(cartProvider).values.toList();
+  final newItemsTotal = ref.watch(cartTotalProvider);
+  final newItemsCount = ref.watch(cartCountProvider);
+  final activeOrderAsync = ref.watch(activeOrderProvider);
 
-    final sessionAsync = ref.watch(customerSessionProvider);
+  final sessionAsync = ref.watch(customerSessionProvider);
+  final session = sessionAsync.value;
 
-final session = sessionAsync.value;
+  final primary = session != null
+      ? colorFromHex(session.primaryColorHex)
+      : Theme.of(context).colorScheme.primary;
 
-final primary = session != null
-    ? colorFromHex(session.primaryColorHex)
-    : Theme.of(context).colorScheme.primary;
+  final accent = session != null
+      ? colorFromHex(session.accentColorHex)
+      : Colors.deepOrange;
 
-final accent = session != null
-    ? colorFromHex(session.accentColorHex)
-    : Colors.deepOrange;
+  final order = activeOrderAsync.when(
+    data: (o) => o,
+    loading: () => null,
+    error: (_, __) => null,
+  );
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF7F7F7),
-      appBar: AppBar(
-        title: const Text('Sepet & Siparişlerim'),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: Center(
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  const Icon(Icons.shopping_bag_outlined),
-                  if (newItemsCount > 0)
-                    Positioned(
-                      right: -6,
-                      top: -6,
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: accent,
-                          shape: BoxShape.circle,
-                        ),
-                        constraints: const BoxConstraints(
-                          minWidth: 18,
-                          minHeight: 18,
-                        ),
-                        child: Text(
-                          '$newItemsCount',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
+  final hasOrder = order != null && order.items.isNotEmpty;
+  final showBottomBar = hasOrder || cartLines.isNotEmpty;
+
+  return Scaffold(
+    backgroundColor: const Color(0xFFF7F7F7),
+    appBar: AppBar(
+      title: const Text('Sepet & Siparişlerim'),
+      actions: [
+        Padding(
+          padding: const EdgeInsets.only(right: 12),
+          child: Center(
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                const Icon(Icons.shopping_bag_outlined),
+                if (newItemsCount > 0)
+                  Positioned(
+                    right: -6,
+                    top: -6,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
+                      constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                      child: Text(
+                        '$newItemsCount',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                            color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700),
                       ),
                     ),
-                ],
-              ),
+                  ),
+              ],
             ),
           ),
-        ],
-      ),
-      body: activeOrderAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, __) =>
-            _buildBody(context, null, cartLines, primary, accent),
-        data: (order) =>
-            _buildBody(context, order, cartLines, primary, accent),
-      ),
-      bottomNavigationBar: cartLines.isEmpty
-          ? null
-          : SafeArea(
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(.06),
-                      blurRadius: 12,
-                      offset: const Offset(0, -2),
-                    ),
+        ),
+      ],
+    ),
+    body: activeOrderAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (_, __) => _buildBody(context, null, cartLines, primary, accent),
+      data: (o) => _buildBody(context, o, cartLines, primary, accent),
+    ),
+    bottomNavigationBar: !showBottomBar
+        ? null
+        : SafeArea(
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(.06),
+                    blurRadius: 12,
+                    offset: const Offset(0, -2),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (hasOrder) ...[
+                    _PaymentOptionsRow(primary: primary, accent: accent),
+                    const SizedBox(height: 14),
                   ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
+                  if (cartLines.isNotEmpty) ...[
+                    if (hasOrder) Divider(height: 1, color: Colors.grey.shade200),
+                    if (hasOrder) const SizedBox(height: 14),
                     Row(
-                      mainAxisAlignment:
-                          MainAxisAlignment.spaceBetween,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Row(
                           children: [
-                            Icon(
-                              Icons.receipt_long,
-                              size: 18,
-                              color: Colors.grey.shade600,
-                            ),
+                            Icon(Icons.receipt_long, size: 18, color: Colors.grey.shade600),
                             const SizedBox(width: 8),
-                            Text(
-                              'TOPLAM TUTAR',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.grey.shade600,
-                                letterSpacing: .3,
-                              ),
-                            ),
+                            Text('TOPLAM TUTAR',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.grey.shade600,
+                                    letterSpacing: .3)),
                           ],
                         ),
-                        Text(
-                          '₺${newItemsTotal.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 18,
-                          ),
-                        ),
+                        Text('₺${newItemsTotal.toStringAsFixed(2)}',
+                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
                       ],
                     ),
                     const SizedBox(height: 12),
@@ -178,45 +169,29 @@ final accent = session != null
                       child: FilledButton.icon(
                         style: FilledButton.styleFrom(
                           backgroundColor: primary,
-                          shape: RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius.circular(14),
-                          ),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                         ),
-                        onPressed:
-                            _placing ? null : _placeOrder,
+                        onPressed: _placing ? null : _placeOrder,
                         icon: _placing
                             ? const SizedBox(
                                 width: 18,
                                 height: 18,
-                                child:
-                                    CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                               )
-                            : const Icon(
-                                Icons.shopping_bag,
-                                size: 18,
-                              ),
+                            : const Icon(Icons.shopping_bag, size: 18),
                         label: Text(
-                          _placing
-                              ? 'Gönderiliyor...'
-                              : 'Siparişe Ekle (₺${newItemsTotal.toStringAsFixed(2)})',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 15,
-                          ),
+                          _placing ? 'Gönderiliyor...' : 'Siparişe Ekle (₺${newItemsTotal.toStringAsFixed(2)})',
+                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
                         ),
                       ),
                     ),
                   ],
-                ),
+                ],
               ),
             ),
-    );
-  }
-
+          ),
+  );
+}
   Widget _buildBody(
     BuildContext context,
     OrderResponse? order,
@@ -768,4 +743,106 @@ Color colorFromHex(String hex) {
   buffer.write(hex.replaceFirst('#', ''));
 
   return Color(int.parse(buffer.toString(), radix: 16));
+}
+class _PaymentOptionsRow extends StatelessWidget {
+  final Color primary;
+  final Color accent;
+
+  const _PaymentOptionsRow({required this.primary, required this.accent});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _PaymentButton(
+            icon: Icons.checklist_rtl,
+            label: 'Seçerek Öde',
+            color: primary,
+            filled: false,
+            onTap: () {}, // sonraki adım
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _PaymentButton(
+            icon: Icons.call_split,
+            label: 'Bölerek Öde',
+            color: primary,
+            filled: false,
+            onTap: () {}, // sonraki adım
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _PaymentButton(
+            icon: Icons.payments,
+            label: 'Hepsini Öde',
+            color: accent,
+            filled: true,
+            onTap: () {}, // sonraki adım
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PaymentButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final bool filled;
+  final VoidCallback onTap;
+
+  const _PaymentButton({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.filled,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 68,
+      child: filled
+          ? FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: color,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+              onPressed: onTap,
+              child: _content(Colors.white),
+            )
+          : OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: color,
+                side: BorderSide(color: color.withOpacity(.4)),
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+              onPressed: onTap,
+              child: _content(color),
+            ),
+    );
+  }
+
+  Widget _content(Color fg) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 20, color: fg),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: fg),
+        ),
+      ],
+    );
+  }
 }
