@@ -14,12 +14,15 @@ void main() {
   runApp(
     ProviderScope(
       child: MaterialApp(
+        debugShowCheckedModeBanner: false, 
         home: (token != null && token.isNotEmpty)
             ? EntryScreen(token: token)
             : const Scaffold(
+              
                 body: Center(
                   child: Text('QR kod bekleniyor...'),
                 ),
+                
               ),
       ),
     ),

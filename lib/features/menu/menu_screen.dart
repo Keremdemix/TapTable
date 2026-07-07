@@ -39,14 +39,16 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
   @override
   Widget build(BuildContext context) {
     final menuAsync = ref.watch(publicMenuProvider);
+    final primary = Theme.of(context).colorScheme.primary;
+    final accent = Theme.of(context).colorScheme.secondary;
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF7F7F8),
       bottomNavigationBar: Consumer(
         builder: (context, ref, _) {
           final cartLines = ref.watch(cartProvider).values.toList();
           final newTotal = ref.watch(cartTotalProvider);
           final activeOrderAsync = ref.watch(activeOrderProvider);
-          final primary = Theme.of(context).colorScheme.primary;
 
           final order = activeOrderAsync.when(
             data: (o) => o,
@@ -73,12 +75,12 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(18),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
-                    blurRadius: 16,
-                    offset: const Offset(0, 4),
+                    color: Colors.black.withOpacity(0.10),
+                    blurRadius: 20,
+                    offset: const Offset(0, 6),
                   ),
                 ],
               ),
@@ -134,9 +136,12 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                         style: FilledButton.styleFrom(
                           backgroundColor: primary,
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 20, vertical: 14),
+                            horizontal: 20,
+                            vertical: 14,
+                          ),
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14)),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
                         ),
                         onPressed: () => Navigator.push(
                           context,
@@ -146,7 +151,9 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                         label: const Text(
                           'Sepete Git',
                           style: TextStyle(
-                              fontWeight: FontWeight.w700, fontSize: 14),
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                          ),
                         ),
                       ),
                     ],
@@ -161,8 +168,9 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, _) => Center(child: Text('Menü yüklenemedi: $err')),
         data: (menu) {
-          _activeCategoryId ??=
-              menu.categories.isNotEmpty ? menu.categories.first.id : null;
+          _activeCategoryId ??= menu.categories.isNotEmpty
+              ? menu.categories.first.id
+              : null;
 
           for (final c in menu.categories) {
             _categoryKeys.putIfAbsent(c.id, () => GlobalKey());
@@ -173,26 +181,23 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
             slivers: [
               SliverAppBar(
                 pinned: true,
-                expandedHeight: 140,
+                stretch: true,
+                expandedHeight: 190,
+                backgroundColor: primary,
+                elevation: 0,
+                automaticallyImplyLeading:
+                    false, // geri butonu da istemiyorsan kalsın
+                title: null, // başlığı kaldır
                 flexibleSpace: FlexibleSpaceBar(
-                  titlePadding: const EdgeInsets.only(left: 16, bottom: 16),
-                  title: Text(
-                    widget.session.restaurantName,
-                    style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.w700),
+                  title: null,
+                  background: _RestaurantHeader(
+                    name: widget.session.restaurantName,
+                    logoUrl: widget.session.logoUrl,
+                    primary: primary,
+                    accent: accent,
                   ),
-                  background: widget.session.logoUrl != null
-                      ? CachedNetworkImage(
-                          imageUrl: widget.session.logoUrl!,
-                          fit: BoxFit.cover,
-                          color: Colors.black.withOpacity(0.25),
-                          colorBlendMode: BlendMode.darken,
-                        )
-                      : Container(
-                          color: Theme.of(context).colorScheme.primary),
                 ),
               ),
-
               // ── Kategori seçici (sticky) ────────────────────────────
               SliverPersistentHeader(
                 pinned: true,
@@ -200,6 +205,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                   categories: menu.categories,
                   activeCategoryId: _activeCategoryId,
                   onSelect: _scrollToCategory,
+                  primary: primary,
                 ),
               ),
 
@@ -208,10 +214,23 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                 SliverToBoxAdapter(
                   key: _categoryKeys[category.id],
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
-                    child: Text(
-                      category.name,
-                      style: Theme.of(context).textTheme.titleLarge,
+                    padding: const EdgeInsets.fromLTRB(16, 22, 16, 10),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 4,
+                          height: 18,
+                          decoration: BoxDecoration(
+                            color: primary,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          category.name,
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -228,6 +247,156 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+/// Üst başlık — restoranın primary/accent renkleriyle gradyan bir zemin,
+/// üzerinde beyaz çerçeveli logo rozeti ve restoran adı. Logo yoksa
+/// baş harfle bir rozet üretir, böylece header hiçbir zaman boş/çirkin durmaz.
+class _RestaurantHeader extends StatelessWidget {
+  final String name;
+  final String? logoUrl;
+  final Color primary;
+  final Color accent;
+
+  const _RestaurantHeader({
+    required this.name,
+    required this.logoUrl,
+    required this.primary,
+    required this.accent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasLogo = logoUrl != null && logoUrl!.isNotEmpty;
+
+    return Container(
+      height: 250,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [primary, Color.lerp(primary, accent, .6)!],
+        ),
+        borderRadius: const BorderRadius.only(
+          bottomLeft: Radius.circular(32),
+          bottomRight: Radius.circular(32),
+        ),
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            right: -40,
+            top: -30,
+            child: _decorativeCircle(150, Colors.white.withOpacity(.08)),
+          ),
+
+          Positioned(
+            left: -60,
+            bottom: -40,
+            child: _decorativeCircle(180, Colors.white.withOpacity(.05)),
+          ),
+
+          SafeArea(
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 92,
+                    height: 92,
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(.18),
+                          blurRadius: 18,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: ClipOval(
+                      child: hasLogo
+                          ? CachedNetworkImage(
+                              imageUrl: logoUrl!,
+                              fit: BoxFit.cover,
+                              placeholder: (_, __) =>
+                                  Container(color: Colors.grey.shade200),
+                              errorWidget: (_, __, ___) =>
+                                  _initialsBadge(primary),
+                            )
+                          : _initialsBadge(primary),
+                    ),
+                  ),
+
+                  const SizedBox(height: 18),
+
+                  Text(
+                    name,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: .3,
+                    ),
+                  ),
+
+                  const SizedBox(height: 6),
+
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(.18),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      "Menüye Hoş Geldiniz",
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(.95),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _decorativeCircle(double size, Color color) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+    );
+  }
+
+  Widget _initialsBadge(Color primary) {
+    final initial = name.trim().isNotEmpty ? name.trim()[0].toUpperCase() : '?';
+    return Container(
+      color: primary.withOpacity(0.1),
+      alignment: Alignment.center,
+      child: Text(
+        initial,
+        style: TextStyle(
+          color: primary,
+          fontWeight: FontWeight.w800,
+          fontSize: 24,
+        ),
       ),
     );
   }
@@ -264,13 +433,19 @@ class _BottomBarSummaryRow extends StatelessWidget {
           child: Text(
             label,
             style: TextStyle(
-                fontWeight: FontWeight.w600, fontSize: 13, color: labelColor),
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+              color: labelColor,
+            ),
           ),
         ),
         Text(
           '₺${amount.toStringAsFixed(2)}',
           style: TextStyle(
-              fontWeight: FontWeight.w700, fontSize: 13, color: labelColor),
+            fontWeight: FontWeight.w700,
+            fontSize: 13,
+            color: labelColor,
+          ),
         ),
       ],
     );
@@ -299,28 +474,22 @@ class _NewItemsRow extends StatelessWidget {
         Center(
           child: Container(
             padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              color: primary,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.add,
-              size: 12,
-              color: Colors.white,
-            ),
+            decoration: BoxDecoration(color: primary, shape: BoxShape.circle),
+            child: const Icon(Icons.add, size: 12, color: Colors.white),
           ),
         ),
         const SizedBox(width: 8),
         Expanded(
           child: SizedBox(
-            height:100,
+            height: 100,
             child: Center(
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 physics: const BouncingScrollPhysics(),
                 itemCount: lines.length,
                 separatorBuilder: (_, __) => const SizedBox(width: 6),
-                itemBuilder: (context, index) => _NewItemThumb(line: lines[index]),
+                itemBuilder: (context, index) =>
+                    _NewItemThumb(line: lines[index]),
               ),
             ),
           ),
@@ -328,7 +497,11 @@ class _NewItemsRow extends StatelessWidget {
         const SizedBox(width: 8),
         Text(
           '₺${total.toStringAsFixed(2)}',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: primary),
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 13,
+            color: primary,
+          ),
         ),
       ],
     );
@@ -338,9 +511,7 @@ class _NewItemsRow extends StatelessWidget {
 class _NewItemThumb extends ConsumerWidget {
   final CartLine line;
 
-  const _NewItemThumb({
-    required this.line,
-  });
+  const _NewItemThumb({required this.line});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -392,7 +563,6 @@ class _NewItemThumb extends ConsumerWidget {
                         ),
                       ),
               ),
-
               if (line.quantity > 1)
                 Positioned(
                   right: -5,
@@ -405,10 +575,7 @@ class _NewItemThumb extends ConsumerWidget {
                     decoration: BoxDecoration(
                       color: Colors.deepOrange,
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: Colors.white,
-                        width: 1.5,
-                      ),
+                      border: Border.all(color: Colors.white, width: 1.5),
                     ),
                     constraints: const BoxConstraints(minWidth: 16),
                     child: Text(
@@ -424,22 +591,15 @@ class _NewItemThumb extends ConsumerWidget {
                 ),
             ],
           ),
-
           const SizedBox(height: 4),
-
           Text(
             line.item.name,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-            ),
+            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
           ),
-
           const SizedBox(height: 4),
-
           Container(
             height: 22,
             decoration: BoxDecoration(
@@ -452,17 +612,11 @@ class _NewItemThumb extends ConsumerWidget {
                 InkWell(
                   borderRadius: BorderRadius.circular(12),
                   onTap: () {
-                    ref
-                        .read(cartProvider.notifier)
-                        .decrement(line.item.id);
+                    ref.read(cartProvider.notifier).decrement(line.item.id);
                   },
                   child: const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 6),
-                    child: Icon(
-                      Icons.remove,
-                      color: Colors.white,
-                      size: 12,
-                    ),
+                    child: Icon(Icons.remove, color: Colors.white, size: 12),
                   ),
                 ),
                 SizedBox(
@@ -480,17 +634,11 @@ class _NewItemThumb extends ConsumerWidget {
                 InkWell(
                   borderRadius: BorderRadius.circular(12),
                   onTap: () {
-                    ref
-                        .read(cartProvider.notifier)
-                        .add(line.item);
+                    ref.read(cartProvider.notifier).add(line.item);
                   },
                   child: const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 6),
-                    child: Icon(
-                      Icons.add,
-                      color: Colors.white,
-                      size: 12,
-                    ),
+                    child: Icon(Icons.add, color: Colors.white, size: 12),
                   ),
                 ),
               ],
@@ -506,40 +654,61 @@ class _CategoryBarDelegate extends SliverPersistentHeaderDelegate {
   final List<PublicCategory> categories;
   final int? activeCategoryId;
   final void Function(int categoryId) onSelect;
+  final Color primary;
 
   _CategoryBarDelegate({
     required this.categories,
     required this.activeCategoryId,
     required this.onSelect,
+    required this.primary,
   });
 
   @override
-  double get minExtent => 56;
+  double get minExtent => 58;
 
   @override
-  double get maxExtent => 56;
+  double get maxExtent => 58;
 
   @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
     return Container(
       color: Colors.white,
       alignment: Alignment.centerLeft,
       child: ListView(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
         children: categories.map((c) {
           final selected = c.id == activeCategoryId;
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: ChoiceChip(
-              label: Text(c.name),
-              selected: selected,
-              labelStyle: TextStyle(
-                color: selected ? Colors.white : Colors.black87,
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
+            child: GestureDetector(
+              onTap: () => onSelect(c.id),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 9,
+                ),
+                decoration: BoxDecoration(
+                  color: selected ? primary : Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(
+                    color: selected ? primary : Colors.grey.shade200,
+                  ),
+                ),
+                child: Text(
+                  c.name,
+                  style: TextStyle(
+                    color: selected ? Colors.white : Colors.black87,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
               ),
-              onSelected: (_) => onSelect(c.id),
             ),
           );
         }).toList(),
@@ -550,7 +719,8 @@ class _CategoryBarDelegate extends SliverPersistentHeaderDelegate {
   @override
   bool shouldRebuild(covariant _CategoryBarDelegate oldDelegate) {
     return oldDelegate.activeCategoryId != activeCategoryId ||
-        oldDelegate.categories != categories;
+        oldDelegate.categories != categories ||
+        oldDelegate.primary != primary;
   }
 }
 
@@ -567,15 +737,15 @@ class _MenuItemCard extends ConsumerWidget {
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
@@ -584,16 +754,20 @@ class _MenuItemCard extends ConsumerWidget {
         children: [
           if (item.imageUrl != null && item.imageUrl!.isNotEmpty)
             ClipRRect(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(12),
               child: CachedNetworkImage(
                 imageUrl: item.imageUrl!,
-                width: 84,
-                height: 84,
+                width: 88,
+                height: 88,
                 fit: BoxFit.cover,
-                placeholder: (_, __) => Container(width: 84, height: 84, color: Colors.grey.shade100),
+                placeholder: (_, __) => Container(
+                  width: 88,
+                  height: 88,
+                  color: Colors.grey.shade100,
+                ),
                 errorWidget: (_, __, ___) => Container(
-                  width: 84,
-                  height: 84,
+                  width: 88,
+                  height: 88,
                   color: Colors.grey.shade100,
                   child: const Icon(Icons.fastfood, color: Colors.grey),
                 ),
@@ -601,11 +775,11 @@ class _MenuItemCard extends ConsumerWidget {
             )
           else
             Container(
-              width: 84,
-              height: 84,
+              width: 88,
+              height: 88,
               decoration: BoxDecoration(
                 color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(Icons.fastfood, color: Colors.grey),
             ),
@@ -614,8 +788,14 @@ class _MenuItemCard extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(item.name, style: Theme.of(context).textTheme.titleMedium),
-                if (item.description != null && item.description!.isNotEmpty) ...[
+                Text(
+                  item.name,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (item.description != null &&
+                    item.description!.isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text(
                     item.description!,
@@ -624,13 +804,27 @@ class _MenuItemCard extends ConsumerWidget {
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ],
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      '₺${item.price.toStringAsFixed(2)}',
-                      style: TextStyle(fontWeight: FontWeight.w700, color: accent, fontSize: 15),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: accent.withOpacity(0.10),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        '₺${item.price.toStringAsFixed(2)}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          color: accent,
+                          fontSize: 14,
+                        ),
+                      ),
                     ),
                     AnimatedSwitcher(
                       duration: const Duration(milliseconds: 200),
@@ -639,11 +833,21 @@ class _MenuItemCard extends ConsumerWidget {
                       child: quantity == 0
                           ? FilledButton.icon(
                               key: const ValueKey('add'),
-                              onPressed: () => ref.read(cartProvider.notifier).add(item),
+                              style: FilledButton.styleFrom(
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              onPressed: () =>
+                                  ref.read(cartProvider.notifier).add(item),
                               icon: const Icon(Icons.add, size: 16),
                               label: const Text('Ekle'),
                             )
-                          : _QuantityStepper(key: const ValueKey('stepper'), item: item, quantity: quantity),
+                          : _QuantityStepper(
+                              key: const ValueKey('stepper'),
+                              item: item,
+                              quantity: quantity,
+                            ),
                     ),
                   ],
                 ),
@@ -659,7 +863,11 @@ class _MenuItemCard extends ConsumerWidget {
 class _QuantityStepper extends ConsumerWidget {
   final PublicMenuItem item;
   final int quantity;
-  const _QuantityStepper({super.key, required this.item, required this.quantity});
+  const _QuantityStepper({
+    super.key,
+    required this.item,
+    required this.quantity,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -682,7 +890,11 @@ class _QuantityStepper extends ConsumerWidget {
             child: Text(
               '$quantity',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14),
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+              ),
             ),
           ),
           _StepperButton(
