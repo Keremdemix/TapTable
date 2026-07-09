@@ -1,3 +1,6 @@
+import 'dart:math' as math;
+
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -33,7 +36,8 @@ class AdminFloorPlanScreen extends ConsumerStatefulWidget {
       _AdminFloorPlanScreenState();
 }
 
-class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
+class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen>
+    with SingleTickerProviderStateMixin {
   List<TableLayoutResponseDto>? _layouts;
   bool _saving = false;
   bool _dirty = false;
@@ -42,10 +46,47 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
   final TransformationController _transformController =
       TransformationController();
 
+  late final AnimationController _animController;
+  late final CurvedAnimation _curvedAnim;
+  Matrix4Tween? _tween;
+
   _DragState? _drag;
+
+  // Son fit edilen viewport boyutu ve o anki "ekrana sığdır" ölçeği.
+  Size? _viewport;
+  double _fitScale = 1.0;
+
+  static const double _absoluteMinScale = 0.05;
+  static const double _maxScale = 3.0;
+
+  // Kaydırma sadece kullanıcı fit ölçeğinin üzerine yakınlaştığında anlamlı;
+  // bu yüzden minScale her zaman güncel fit ölçeğine eşitlenir. Böylece
+  // kullanıcı fit'in altına asla inemez ve fit halindeyken canvas her zaman
+  // tam ortalanmış kalır.
+  double _minScale = 1.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 260),
+    );
+    _curvedAnim = CurvedAnimation(
+      parent: _animController,
+      curve: Curves.easeOutCubic,
+    );
+    _animController.addListener(() {
+      final tween = _tween;
+      if (tween != null) {
+        _transformController.value = tween.evaluate(_curvedAnim);
+      }
+    });
+  }
 
   @override
   void dispose() {
+    _animController.dispose();
     _transformController.dispose();
     super.dispose();
   }
@@ -66,7 +107,6 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
       _selectedTableId = null;
     });
   }
-
 
   // ─── Pozisyon güncelleme ─────────────────────────────────────────────────────
 
@@ -98,14 +138,131 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
     return m.getMaxScaleOnAxis();
   }
 
+  // ─── Zoom / Pan / Fit ─────────────────────────────────────────────────────
+
+  /// Verilen viewport için canvas'ı ortalayan "ekrana sığdır" matrisini üretir.
+  Matrix4 _computeFitMatrix(Size viewport) {
+    final canvasWidth = LayoutConstants.canvasWidth;
+    final canvasHeight = LayoutConstants.canvasHeight;
+
+    final sx = viewport.width / canvasWidth;
+    final sy = viewport.height / canvasHeight;
+    final scale = math.min(sx, sy).clamp(_absoluteMinScale, _maxScale);
+
+    final dx = (viewport.width - canvasWidth * scale) / 2;
+    final dy = (viewport.height - canvasHeight * scale) / 2;
+
+    return Matrix4.identity()
+      ..translate(dx, dy)
+      ..scale(scale);
+  }
+
+  /// Canvas hiçbir zaman viewport'un dışına taşıp boşluk göstermesin diye
+  /// matrisin translation'ını sınırlar. Görünür bir çerçeve yok; sadece
+  /// pan/zoom kenara gelince görünmez şekilde durur.
+  Matrix4 _clampMatrix(Matrix4 matrix, Size viewport) {
+    final scale = matrix.getMaxScaleOnAxis();
+    final scaledWidth = LayoutConstants.canvasWidth * scale;
+    final scaledHeight = LayoutConstants.canvasHeight * scale;
+
+    double tx = matrix.storage[12];
+    double ty = matrix.storage[13];
+
+    if (scaledWidth <= viewport.width) {
+      tx = (viewport.width - scaledWidth) / 2;
+    } else {
+      tx = tx.clamp(viewport.width - scaledWidth, 0.0);
+    }
+
+    if (scaledHeight <= viewport.height) {
+      ty = (viewport.height - scaledHeight) / 2;
+    } else {
+      ty = ty.clamp(viewport.height - scaledHeight, 0.0);
+    }
+
+    final result = matrix.clone();
+    result.storage[12] = tx;
+    result.storage[13] = ty;
+    return result;
+  }
+
+  void _animateTo(Matrix4 target) {
+    _tween = Matrix4Tween(
+      begin: _transformController.value.clone(),
+      end: target,
+    );
+    _animController.forward(from: 0);
+  }
+
+  /// Canvas'ı viewport'a sığdırır. İlk açılışta anında, sonraki
+  /// (pencere yeniden boyutlandığında) durumlarda yumuşak geçişle.
+  void _fitCanvas(Size viewport, {bool animate = true}) {
+    if (viewport.width <= 0 || viewport.height <= 0) return;
+
+    _viewport = viewport;
+    final target = _clampMatrix(_computeFitMatrix(viewport), viewport);
+    _fitScale = target.getMaxScaleOnAxis();
+    // Fit'in altına asla zoom out edilemesin; kaydırma da bu ölçekte
+    // devre dışı bırakılacak (bkz. panEnabled hesaplaması _buildCanvas içinde).
+    _minScale = _fitScale;
+
+    if (animate) {
+      _animateTo(target);
+    } else {
+      _transformController.value = target;
+    }
+  }
+
+  /// Hem "+/-" butonları hem de fare tekerleği birebir aynı şekilde,
+  /// viewport'un merkezine göre zoomlar — aralarında davranış farkı olmaz.
+  void _applyZoom(double factor, {bool animate = true}) {
+    final viewport = _viewport;
+    if (viewport == null) return;
+
+    final currentScale = _transformController.value.getMaxScaleOnAxis();
+    final newScale = (currentScale * factor).clamp(_minScale, _maxScale);
+    final actualFactor = newScale / currentScale;
+    if ((actualFactor - 1).abs() < 0.0001) return;
+
+    final center = Offset(viewport.width / 2, viewport.height / 2);
+    final scenePoint = _transformController.toScene(center);
+
+    var target = _transformController.value.clone()
+      ..translate(scenePoint.dx, scenePoint.dy)
+      ..scale(actualFactor)
+      ..translate(-scenePoint.dx, -scenePoint.dy);
+
+    target = _clampMatrix(target, viewport);
+
+    if (animate) {
+      _animateTo(target);
+    } else {
+      _transformController.value = target;
+    }
+  }
+
+  void _resetZoom() {
+    final viewport = _viewport;
+    if (viewport != null) {
+      _fitCanvas(viewport, animate: true);
+    }
+  }
+
+  void _handlePointerSignal(PointerSignalEvent event) {
+    if (event is PointerScrollEvent) {
+      final zoomingIn = event.scrollDelta.dy < 0;
+      final factor = zoomingIn ? 1.1 : 1 / 1.1;
+      _applyZoom(factor);
+    }
+  }
+
   // ─── Şekil değiştirme (çift tıklama) ────────────────────────────────────────
 
   void _toggleShape(int tableId) {
     setState(() {
       _layouts = _layouts!.map((t) {
         if (t.tableId != tableId) return t;
-        return t.copyWith(
-            shape: t.shape == 'circle' ? 'rectangle' : 'circle');
+        return t.copyWith(shape: t.shape == 'circle' ? 'rectangle' : 'circle');
       }).toList();
       _dirty = true;
     });
@@ -118,14 +275,16 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
     setState(() => _saving = true);
     try {
       final items = _layouts!
-          .map((t) => UpdateTableLayoutItemInput(
-                tableId: t.tableId,
-                positionX: t.positionX,
-                positionY: t.positionY,
-                width: t.width,
-                height: t.height,
-                shape: t.shape,
-              ))
+          .map(
+            (t) => UpdateTableLayoutItemInput(
+              tableId: t.tableId,
+              positionX: t.positionX,
+              positionY: t.positionY,
+              width: t.width,
+              height: t.height,
+              shape: t.shape,
+            ),
+          )
           .toList();
       await ref.read(tableRepositoryProvider).saveLayout(items);
       if (mounted) {
@@ -153,10 +312,12 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
   // ─── CRUD: Masa ekle / düzenle ───────────────────────────────────────────────
 
   Future<void> _showTableForm({TableResponseDto? existing}) async {
-    final numberController =
-        TextEditingController(text: existing?.tableNumber.toString() ?? '');
-    final capacityController =
-        TextEditingController(text: existing?.capacity.toString() ?? '4');
+    final numberController = TextEditingController(
+      text: existing?.tableNumber.toString() ?? '',
+    );
+    final capacityController = TextEditingController(
+      text: existing?.capacity.toString() ?? '4',
+    );
     bool isActive = existing?.isActive ?? true;
 
     await showDialog(
@@ -164,7 +325,10 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
           title: Text(
-              existing == null ? 'Yeni Masa' : 'Masa ${existing.tableNumber} Düzenle'),
+            existing == null
+                ? 'Yeni Masa'
+                : 'Masa ${existing.tableNumber} Düzenle',
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -192,8 +356,9 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
           ),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Vazgeç')),
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Vazgeç'),
+            ),
             FilledButton(
               onPressed: () async {
                 final number = int.tryParse(numberController.text);
@@ -204,7 +369,9 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
                   final repository = ref.read(tableRepositoryProvider);
                   if (existing == null) {
                     await repository.createTable(
-                        tableNumber: number, capacity: capacity);
+                      tableNumber: number,
+                      capacity: capacity,
+                    );
                   } else {
                     await repository.updateTable(
                       id: existing.id,
@@ -217,8 +384,9 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
                   _refreshAfterMutation();
                 } on ApiException catch (e) {
                   if (dialogContext.mounted) {
-                    ScaffoldMessenger.of(dialogContext)
-                        .showSnackBar(SnackBar(content: Text(e.message)));
+                    ScaffoldMessenger.of(
+                      dialogContext,
+                    ).showSnackBar(SnackBar(content: Text(e.message)));
                   }
                 }
               },
@@ -240,8 +408,9 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
         content: Text('Masa ${table.tableNumber} silinsin mi?'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Vazgeç')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Vazgeç'),
+          ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.pop(ctx, true),
@@ -257,8 +426,9 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
       _refreshAfterMutation();
     } on ApiException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.message)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
       }
     }
   }
@@ -279,14 +449,18 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
               child: QrImageView(data: table.qrCodeUrl, size: 200),
             ),
             const SizedBox(height: 12),
-            Text(table.qrCodeUrl,
-                style: const TextStyle(fontSize: 12), textAlign: TextAlign.center),
+            Text(
+              table.qrCodeUrl,
+              style: const TextStyle(fontSize: 12),
+              textAlign: TextAlign.center,
+            ),
           ],
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Kapat')),
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Kapat'),
+          ),
           FilledButton(
             onPressed: () async {
               final confirmed = await showDialog<bool>(
@@ -299,11 +473,13 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
                   ),
                   actions: [
                     TextButton(
-                        onPressed: () => Navigator.pop(confirmContext, false),
-                        child: const Text('Vazgeç')),
+                      onPressed: () => Navigator.pop(confirmContext, false),
+                      child: const Text('Vazgeç'),
+                    ),
                     FilledButton(
-                        onPressed: () => Navigator.pop(confirmContext, true),
-                        child: const Text('Devam Et')),
+                      onPressed: () => Navigator.pop(confirmContext, true),
+                      child: const Text('Devam Et'),
+                    ),
                   ],
                 ),
               );
@@ -315,8 +491,9 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
                 _refreshAfterMutation();
               } on ApiException catch (e) {
                 if (dialogContext.mounted) {
-                  ScaffoldMessenger.of(dialogContext)
-                      .showSnackBar(SnackBar(content: Text(e.message)));
+                  ScaffoldMessenger.of(
+                    dialogContext,
+                  ).showSnackBar(SnackBar(content: Text(e.message)));
                 }
               }
             },
@@ -381,8 +558,10 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
       foregroundColor: Theme.of(context).colorScheme.onSurface,
       title: Row(
         children: [
-          const Text('Masa Düzeni',
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+          const Text(
+            'Masa Düzeni',
+            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+          ),
           if (_dirty) ...[
             const SizedBox(width: 8),
             Container(
@@ -394,9 +573,10 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
               child: Text(
                 '● Kaydedilmedi',
                 style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.orange.shade800,
-                    fontWeight: FontWeight.w500),
+                  fontSize: 11,
+                  color: Colors.orange.shade800,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
           ],
@@ -406,7 +586,7 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
         IconButton(
           tooltip: 'Görünümü sıfırla',
           icon: const Icon(Icons.center_focus_strong_outlined, size: 20),
-          onPressed: () => _transformController.value = Matrix4.identity(),
+          onPressed: _resetZoom,
         ),
         Padding(
           padding: const EdgeInsets.only(right: 12, left: 4),
@@ -417,13 +597,17 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
                     width: 14,
                     height: 14,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white))
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
                 : const Icon(Icons.save_outlined, size: 16),
             label: const Text('Kaydet', style: TextStyle(fontSize: 13)),
             style: FilledButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8)),
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
           ),
         ),
@@ -444,7 +628,10 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
         alignment: WrapAlignment.center,
         children: const [
           _HintChip(icon: Icons.open_with, label: 'Sürükle → taşı'),
-          _HintChip(icon: Icons.touch_app_outlined, label: 'Çift tıkla → şekil değiştir'),
+          _HintChip(
+            icon: Icons.touch_app_outlined,
+            label: 'Çift tıkla → şekil değiştir',
+          ),
           _HintChip(icon: Icons.info_outline, label: 'Tek tıkla → seç'),
           _HintChip(icon: Icons.pinch_outlined, label: 'Pinch → yakınlaştır'),
         ],
@@ -455,17 +642,63 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
   // ─── Canvas ──────────────────────────────────────────────────────────────────
 
   Widget _buildCanvas() {
-    return InteractiveViewer(
-      transformationController: _transformController,
-      minScale: 0.3,
-      maxScale: 3.0,
-      constrained: false,
-      alignment: Alignment.topLeft,
-      boundaryMargin: EdgeInsets.zero,
-      child: _buildCanvasContent(
-        LayoutConstants.canvasWidth,
-        LayoutConstants.canvasHeight,
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final viewportSize = Size(constraints.maxWidth, constraints.maxHeight);
+
+        // İlk açılışta veya viewport boyutu değiştiğinde (pencere yeniden
+        // boyutlandığında) canvas'ı otomatik olarak yeniden sığdır.
+        if (_viewport != viewportSize) {
+          final target = viewportSize;
+          final isFirstFit = _viewport == null;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _fitCanvas(target, animate: !isFirstFit);
+          });
+        }
+
+        return Stack(
+          children: [
+            Listener(
+              onPointerSignal: _handlePointerSignal,
+              child: ValueListenableBuilder<Matrix4>(
+                valueListenable: _transformController,
+                builder: (context, matrix, child) {
+                  // Sadece fit ölçeğinin üzerine yakınlaştırıldığında
+                  // kaydırmaya izin ver; fit halindeyken canvas her zaman
+                  // tam ortada sabit kalsın.
+                  final scale = matrix.getMaxScaleOnAxis();
+                  final panEnabled = scale > _fitScale * 1.01;
+                  return InteractiveViewer(
+                    transformationController: _transformController,
+                    panEnabled: panEnabled,
+                    scaleEnabled: true,
+                    minScale: _minScale,
+                    maxScale: _maxScale,
+                    constrained: false,
+                    alignment: Alignment.topLeft,
+                    boundaryMargin: EdgeInsets.zero,
+                    child: child!,
+                  );
+                },
+                child: _buildCanvasContent(
+                  LayoutConstants.canvasWidth,
+                  LayoutConstants.canvasHeight,
+                ),
+              ),
+            ),
+            Positioned(
+              right: 16,
+              bottom: 16,
+              child: _ZoomControls(
+                controller: _transformController,
+                onZoomIn: () => _applyZoom(1.25),
+                onZoomOut: () => _applyZoom(1 / 1.25),
+                onReset: _resetZoom,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -507,7 +740,9 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
         onDoubleTap: () => _toggleShape(t.tableId),
         onTap: () {
           setState(() {
-            _selectedTableId = (_selectedTableId == t.tableId) ? null : t.tableId;
+            _selectedTableId = (_selectedTableId == t.tableId)
+                ? null
+                : t.tableId;
           });
         },
         onPanStart: (details) {
@@ -552,18 +787,20 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
             boxShadow: isDraggingThis
                 ? [
                     BoxShadow(
-                        color: Colors.black.withOpacity(0.18),
-                        blurRadius: 16,
-                        offset: const Offset(0, 6))
+                      color: Colors.black.withOpacity(0.18),
+                      blurRadius: 16,
+                      offset: const Offset(0, 6),
+                    ),
                   ]
                 : isSelected
-                    ? [
-                        BoxShadow(
-                            color: Colors.blue.withOpacity(0.3),
-                            blurRadius: 8,
-                            spreadRadius: 1)
-                      ]
-                    : [],
+                ? [
+                    BoxShadow(
+                      color: Colors.blue.withOpacity(0.3),
+                      blurRadius: 8,
+                      spreadRadius: 1,
+                    ),
+                  ]
+                : [],
           ),
           child: TableShapeWidget(
             tableNumber: t.tableNumber,
@@ -601,11 +838,15 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: Text(label,
-                  style: TextStyle(fontSize: 13, color: Colors.grey.shade700)),
+              child: Text(
+                label,
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+              ),
             ),
-            Text('$count',
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+            Text(
+              '$count',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            ),
           ],
         ),
       );
@@ -624,9 +865,14 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-            child: Text('Özet',
-                style: const TextStyle(
-                    fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black87)),
+            child: Text(
+              'Özet',
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+            ),
           ),
           Divider(height: 1, color: Colors.grey.shade200),
           Padding(
@@ -636,10 +882,26 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
               children: [
                 statRow('Toplam Masa', total, Colors.grey.shade700),
                 const Divider(height: 20),
-                statRow('Müsait', counts[TableStatus.available] ?? 0, Colors.green),
-                statRow('Dolu', counts[TableStatus.occupied] ?? 0, Colors.orange),
-                statRow('Rezerve', counts[TableStatus.reserved] ?? 0, Colors.blue),
-                statRow('Kapalı', counts[TableStatus.outOfService] ?? 0, Colors.grey),
+                statRow(
+                  'Müsait',
+                  counts[TableStatus.available] ?? 0,
+                  Colors.green,
+                ),
+                statRow(
+                  'Dolu',
+                  counts[TableStatus.occupied] ?? 0,
+                  Colors.orange,
+                ),
+                statRow(
+                  'Rezerve',
+                  counts[TableStatus.reserved] ?? 0,
+                  Colors.blue,
+                ),
+                statRow(
+                  'Kapalı',
+                  counts[TableStatus.outOfService] ?? 0,
+                  Colors.grey,
+                ),
               ],
             ),
           ),
@@ -663,8 +925,7 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
     if (t == null) return const SizedBox.shrink();
 
     // Layout DTO'su isActive/qrCodeUrl içermediği için eşleşen tam masa kaydını buluyoruz.
-    final fullTable =
-        allTables?.where((x) => x.id == t.tableId).firstOrNull;
+    final fullTable = allTables?.where((x) => x.id == t.tableId).firstOrNull;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
@@ -683,11 +944,14 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
               child: Row(
                 children: [
                   const Expanded(
-                    child: Text('Masa Bilgisi',
-                        style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black87)),
+                    child: Text(
+                      'Masa Bilgisi',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                      ),
+                    ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.close, size: 18),
@@ -708,18 +972,23 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
                   _InfoRow(label: 'Masa No', value: '#${t.tableNumber}'),
                   _InfoRow(label: 'Kapasite', value: '${t.capacity} kişi'),
                   _InfoRow(
-                      label: 'Durum',
-                      value: _statusLabel(t.status.name),
-                      valueColor: _statusColor(t.status.name)),
+                    label: 'Durum',
+                    value: _statusLabel(t.status.name),
+                    valueColor: _statusColor(t.status.name),
+                  ),
                   _InfoRow(
-                      label: 'Şekil',
-                      value: t.shape == 'circle' ? 'Yuvarlak' : 'Dikdörtgen'),
+                    label: 'Şekil',
+                    value: t.shape == 'circle' ? 'Yuvarlak' : 'Dikdörtgen',
+                  ),
                   _InfoRow(
-                      label: 'Konum', value: '${t.positionX}, ${t.positionY}'),
+                    label: 'Konum',
+                    value: '${t.positionX}, ${t.positionY}',
+                  ),
                   if (fullTable != null)
                     _InfoRow(
-                        label: 'Aktif',
-                        value: fullTable.isActive ? 'Evet' : 'Hayır'),
+                      label: 'Aktif',
+                      value: fullTable.isActive ? 'Evet' : 'Hayır',
+                    ),
                 ],
               ),
             ),
@@ -746,7 +1015,8 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 10),
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8)),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                     ),
                   ),
@@ -757,12 +1027,15 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
                       child: OutlinedButton.icon(
                         onPressed: () => _showTableForm(existing: fullTable),
                         icon: const Icon(Icons.edit_outlined, size: 16),
-                        label: const Text('Düzenle',
-                            style: TextStyle(fontSize: 13)),
+                        label: const Text(
+                          'Düzenle',
+                          style: TextStyle(fontSize: 13),
+                        ),
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 10),
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8)),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                         ),
                       ),
                     ),
@@ -772,12 +1045,15 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
                       child: OutlinedButton.icon(
                         onPressed: () => _showQrDialog(fullTable),
                         icon: const Icon(Icons.qr_code, size: 16),
-                        label: const Text('QR Göster',
-                            style: TextStyle(fontSize: 13)),
+                        label: const Text(
+                          'QR Göster',
+                          style: TextStyle(fontSize: 13),
+                        ),
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 10),
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8)),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                         ),
                       ),
                     ),
@@ -786,15 +1062,21 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
                       width: double.infinity,
                       child: OutlinedButton.icon(
                         onPressed: () => _confirmDelete(fullTable),
-                        icon: const Icon(Icons.delete_outline,
-                            size: 16, color: Colors.red),
-                        label: const Text('Sil',
-                            style: TextStyle(fontSize: 13, color: Colors.red)),
+                        icon: const Icon(
+                          Icons.delete_outline,
+                          size: 16,
+                          color: Colors.red,
+                        ),
+                        label: const Text(
+                          'Sil',
+                          style: TextStyle(fontSize: 13, color: Colors.red),
+                        ),
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 10),
                           side: BorderSide(color: Colors.red.shade200),
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8)),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                         ),
                       ),
                     ),
@@ -804,7 +1086,9 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
                       child: Text(
                         'Masa detayları yükleniyor…',
                         style: TextStyle(
-                            fontSize: 11, color: Colors.grey.shade500),
+                          fontSize: 11,
+                          color: Colors.grey.shade500,
+                        ),
                       ),
                     ),
                 ],
@@ -820,20 +1104,124 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen> {
 
   String _statusLabel(String s) {
     switch (s) {
-      case 'Available': return 'Boş';
-      case 'Occupied':  return 'Dolu';
-      case 'Reserved':  return 'Rezerve';
-      default:          return s;
+      case 'Available':
+        return 'Boş';
+      case 'Occupied':
+        return 'Dolu';
+      case 'Reserved':
+        return 'Rezerve';
+      default:
+        return s;
     }
   }
 
   Color _statusColor(String s) {
     switch (s) {
-      case 'Available': return Colors.green.shade700;
-      case 'Occupied':  return Colors.red.shade700;
-      case 'Reserved':  return Colors.orange.shade700;
-      default:          return Colors.grey;
+      case 'Available':
+        return Colors.green.shade700;
+      case 'Occupied':
+        return Colors.red.shade700;
+      case 'Reserved':
+        return Colors.orange.shade700;
+      default:
+        return Colors.grey;
     }
+  }
+}
+
+// ─── Zoom Kontrolleri ─────────────────────────────────────────────────────────
+
+/// Sağ altta yüzen zoom in / zoom out / ekrana sığdır kontrolleri.
+/// Anlık zoom yüzdesini de gösterir.
+class _ZoomControls extends StatelessWidget {
+  final TransformationController controller;
+  final VoidCallback onZoomIn;
+  final VoidCallback onZoomOut;
+  final VoidCallback onReset;
+
+  const _ZoomControls({
+    required this.controller,
+    required this.onZoomIn,
+    required this.onZoomOut,
+    required this.onReset,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      elevation: 4,
+      shadowColor: Colors.black.withOpacity(0.18),
+      borderRadius: BorderRadius.circular(12),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _ZoomButton(icon: Icons.add, tooltip: 'Yakınlaştır', onTap: onZoomIn),
+          Divider(height: 1, color: Colors.grey.shade100),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: ValueListenableBuilder<Matrix4>(
+              valueListenable: controller,
+              builder: (context, matrix, _) {
+                final percent = (matrix.getMaxScaleOnAxis() * 100).round();
+                return SizedBox(
+                  width: 40,
+                  child: Text(
+                    '%$percent',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          Divider(height: 1, color: Colors.grey.shade100),
+          _ZoomButton(
+            icon: Icons.remove,
+            tooltip: 'Uzaklaştır',
+            onTap: onZoomOut,
+          ),
+          Divider(height: 1, color: Colors.grey.shade100),
+          _ZoomButton(
+            icon: Icons.fit_screen_rounded,
+            tooltip: 'Ekrana Sığdır',
+            onTap: onReset,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ZoomButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  const _ZoomButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        child: SizedBox(
+          width: 40,
+          height: 40,
+          child: Icon(icon, size: 18, color: Colors.black87),
+        ),
+      ),
+    );
   }
 }
 
@@ -872,8 +1260,10 @@ class _HintChip extends StatelessWidget {
       children: [
         Icon(icon, size: 13, color: Colors.blue.shade700),
         const SizedBox(width: 4),
-        Text(label,
-            style: TextStyle(fontSize: 11, color: Colors.blue.shade800)),
+        Text(
+          label,
+          style: TextStyle(fontSize: 11, color: Colors.blue.shade800),
+        ),
       ],
     );
   }
@@ -892,14 +1282,18 @@ class _InfoRow extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label,
-              style: TextStyle(
-                  fontSize: 12, color: Colors.grey.shade600)),
-          Text(value,
-              style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: valueColor ?? Colors.black87)),
+          Text(
+            label,
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: valueColor ?? Colors.black87,
+            ),
+          ),
         ],
       ),
     );

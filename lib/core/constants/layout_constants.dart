@@ -6,6 +6,6 @@ class LayoutConstants {
   /// Sağdaki panel zaten Row içinde sabit genişlikte olduğundan, canvas'ın
   /// görünür kısmı otomatik olarak "kalan alan" kadar olur — ayrıca yüzde
   /// hesabına gerek yok.
-  static const double canvasWidth = 1200;
+  static const double canvasWidth = 1700;
   static const double canvasHeight = 900;
 }
