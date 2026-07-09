@@ -300,6 +300,22 @@ class _WaiterHomeScreenState extends ConsumerState<WaiterHomeScreen>
                   });
                 }
 
+                // Seçili masanın layout snapshot'ı (_selected) her build'de
+                // güncel listeyle senkron tutulur. Böylece ödeme/ekleme gibi
+                // işlemlerden sonra provider tazelendiğinde, sidebar'a
+                // geçirilen masa nesnesi de (renk/duruma bakılmadan) güncel
+                // kalır — kullanıcı ekrandan çıkıp tekrar girmek zorunda
+                // kalmaz.
+                if (_selected != null) {
+                  final fresh = layouts.firstWhere(
+                    (t) => t.tableId == _selected!.tableId,
+                    orElse: () => _selected!,
+                  );
+                  if (!identical(fresh, _selected)) {
+                    _selected = fresh;
+                  }
+                }
+
                 // İlk açılışta veya viewport boyutu değiştiğinde (sidebar
                 // açılıp kapandığında, pencere yeniden boyutlandığında)
                 // canvas'ı otomatik olarak yeniden sığdır.
@@ -730,6 +746,10 @@ class _TableSidebar extends ConsumerWidget {
                             ref.invalidate(
                               tableActiveOrderProvider(table.tableId),
                             );
+                            // Yeni ürün eklemek masa durumunu da
+                            // etkileyebileceğinden (ör. Müsait → Dolu)
+                            // kat planı da tazelenir.
+                            ref.invalidate(tableLayoutProvider);
                           },
                           icon: const Icon(Icons.add, size: 16),
                           label: const Text(
@@ -756,6 +776,11 @@ class _TableSidebar extends ConsumerWidget {
                                   ref.invalidate(
                                     tableActiveOrderProvider(table.tableId),
                                   );
+                                  // Ödeme tamamlanınca masa boşa
+                                  // düşebileceğinden (Dolu → Müsait) kat
+                                  // planı rengi anında güncellensin diye
+                                  // burada da tazeliyoruz.
+                                  ref.invalidate(tableLayoutProvider);
                                 },
                           icon: const Icon(Icons.payments, size: 16),
                           label: Text(

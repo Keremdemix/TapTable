@@ -14,6 +14,11 @@ import 'package:tap_table_staff/core/constants/layout_constants.dart';
 const double _gridSnap = 40;
 const double _dragThreshold = 4.0;
 
+/// Sidebar'ı gösterecek kadar geniş ekranlar için eşik. Altında masa
+/// detayı ayrı bir sayfada (tam ekran) açılır — waiter_home_screen.dart
+/// ile aynı mantık.
+const double _sidebarBreakpoint = 700;
+
 /// Aktif olarak sürüklenen masanın durumunu tutar.
 class _DragState {
   final int tableId;
@@ -42,6 +47,12 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen>
   bool _saving = false;
   bool _dirty = false;
   int? _selectedTableId;
+
+  /// Masa oluşturma/düzenleme formunda girilen boyut, veriler backend'den
+  /// yeniden yüklendiğinde _initFrom içinde ilgili layout kaydına
+  /// uygulanmak üzere burada bekletilir (tableNumber ile eşleştirilir,
+  /// çünkü yeni masalarda henüz tableId bilinmiyor).
+  ({int tableNumber, double width, double height})? _pendingSizeOverride;
 
   final TransformationController _transformController =
       TransformationController();
@@ -93,19 +104,78 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen>
 
   // ─── Veri ───────────────────────────────────────────────────────────────────
 
+  /// Sunucudan gelen her yeni veriyi yerel canvas state'iyle birleştirir.
+  /// Önceden bu metot sadece İLK yüklemede çalışıp sonra donuyordu
+  /// (`_layouts ??=`); bu yüzden ne sunucudaki canlı değişiklikler
+  /// (ör. ödeme sonrası masa boşa düşmesi) ne de art arda yapılan
+  /// düzenlemeler doğru yansıyordu. Artık her veri geldiğinde çalışır:
+  /// - Kaydedilmemiş (henüz "Kaydet"e basılmamış) konum/boyut/şekil
+  ///   değişiklikleri korunur.
+  /// - Durum/kapasite/masa numarası gibi sunucu kaynaklı alanlar her
+  ///   zaman güncellenir.
+  /// - Yeni eklenen masalar otomatik görünür, silinenler otomatik kaybolur.
   void _initFrom(List<TableLayoutResponseDto> data) {
-    _layouts ??= List.of(data);
+    final current = _layouts;
+
+    if (current == null) {
+      _layouts = List.of(data);
+    } else {
+      final merged = <TableLayoutResponseDto>[];
+      for (final fresh in data) {
+        final localIdx = current.indexWhere((t) => t.tableId == fresh.tableId);
+        if (localIdx == -1) {
+          // Sunucuda yeni: yerelde henüz yok, olduğu gibi ekle.
+          merged.add(fresh);
+        } else {
+          // Zaten yerelde var: kaydedilmemiş canvas alanlarını koru,
+          // gerisini sunucudan güncelle.
+          final local = current[localIdx];
+          merged.add(
+            fresh.copyWith(
+              positionX: local.positionX,
+              positionY: local.positionY,
+              width: local.width,
+              height: local.height,
+              shape: local.shape,
+            ),
+          );
+        }
+      }
+      _layouts = merged;
+    }
+
+    final pending = _pendingSizeOverride;
+    if (pending != null) {
+      final idx = _layouts!.indexWhere(
+        (t) => t.tableNumber == pending.tableNumber,
+      );
+      if (idx != -1) {
+        final t = _layouts![idx];
+        _layouts![idx] = t.copyWith(
+          width: pending.width.toInt(),
+          height: pending.height.toInt(),
+        );
+        _pendingSizeOverride = null;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() => _dirty = true);
+        });
+      }
+      // Eşleşme bulunamadıysa (masa henüz sunucu tarafında layout'a
+      // yansımamış olabilir) pending override saklanmaya devam eder ve
+      // bir sonraki veri gelişinde tekrar denenir.
+    }
   }
 
-  /// Liste/CRUD verisi değiştiğinde (masa eklendi/silindi) cache'i sıfırlayıp
-  /// her iki provider'ı da tazeler.
+  /// Liste/CRUD verisi değiştiğinde (masa eklendi/silindi/düzenlendi) her
+  /// iki provider'ı da tazeler. `_layouts` artık burada sıfırlanmıyor —
+  /// sunucudan gelen taze veri `_initFrom` içinde yerel (kaydedilmemiş)
+  /// canvas değişiklikleriyle birleştiriliyor. Böylece bir masayı
+  /// düzenlerken başka bir masadaki kaydedilmemiş konum/boyut/şekil
+  /// değişikliği kaybolmuyor.
   void _refreshAfterMutation() {
     ref.invalidate(tablesProvider);
     ref.invalidate(tableLayoutProvider);
-    setState(() {
-      _layouts = null;
-      _selectedTableId = null;
-    });
+    setState(() => _selectedTableId = null);
   }
 
   // ─── Pozisyon güncelleme ─────────────────────────────────────────────────────
@@ -268,6 +338,56 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen>
     });
   }
 
+  // ─── Masa seçimi / detay açma ─────────────────────────────────────────────
+
+  /// Geniş ekranda sağdaki panelde seçili masayı değiştirir; dar ekranda
+  /// (mobil) panel için yer olmadığından masa detayını ayrı bir sayfada açar.
+  void _handleTableTap(TableLayoutResponseDto t, bool wide) {
+    if (!wide) {
+      _openFullDetail(t);
+      return;
+    }
+    setState(() {
+      _selectedTableId = (_selectedTableId == t.tableId) ? null : t.tableId;
+    });
+  }
+
+  Future<void> _openFullDetail(TableLayoutResponseDto t) async {
+    setState(() => _selectedTableId = t.tableId);
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          appBar: AppBar(title: Text('Masa ${t.tableNumber}')),
+          body: Consumer(
+            builder: (context, ref, _) {
+              // Doğrudan provider'ları izliyoruz (ebeveyn ekranın yerel
+              // _layouts state'ine değil) ki bu sayfa açıkken bile
+              // sunucudan gelen durum/kapasite değişiklikleri anında
+              // yansısın.
+              final layoutAsync = ref.watch(tableLayoutProvider);
+              final tablesAsync = ref.watch(tablesProvider);
+              final current =
+                  layoutAsync.valueOrNull
+                      ?.where((x) => x.tableId == t.tableId)
+                      .firstOrNull ??
+                  t;
+              final fullTable = tablesAsync.valueOrNull
+                  ?.where((x) => x.id == t.tableId)
+                  .firstOrNull;
+              return SingleChildScrollView(
+                child: _buildTableInfoAndActions(current, fullTable),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+
+    if (mounted) setState(() => _selectedTableId = null);
+  }
+
   // ─── Kaydet (kat planı pozisyonları) ─────────────────────────────────────────
 
   Future<void> _save() async {
@@ -318,6 +438,19 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen>
     final capacityController = TextEditingController(
       text: existing?.capacity.toString() ?? '4',
     );
+
+    // Mevcut masanın boyutu canvas'taki layout kaydından okunur; yeni
+    // masalar için makul bir varsayılan boyut kullanılır.
+    final existingLayout = existing == null
+        ? null
+        : _layouts?.where((t) => t.tableId == existing.id).firstOrNull;
+    final widthController = TextEditingController(
+      text: (existingLayout?.width ?? 80).toStringAsFixed(0),
+    );
+    final heightController = TextEditingController(
+      text: (existingLayout?.height ?? 80).toStringAsFixed(0),
+    );
+
     bool isActive = existing?.isActive ?? true;
 
     await showDialog(
@@ -329,30 +462,64 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen>
                 ? 'Yeni Masa'
                 : 'Masa ${existing.tableNumber} Düzenle',
           ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: numberController,
-                decoration: const InputDecoration(labelText: 'Masa Numarası'),
-                keyboardType: TextInputType.number,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: capacityController,
-                decoration: const InputDecoration(labelText: 'Kapasite'),
-                keyboardType: TextInputType.number,
-              ),
-              if (existing != null) ...[
-                const SizedBox(height: 12),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Aktif'),
-                  value: isActive,
-                  onChanged: (val) => setDialogState(() => isActive = val),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: numberController,
+                  decoration: const InputDecoration(labelText: 'Masa Numarası'),
+                  keyboardType: TextInputType.number,
                 ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: capacityController,
+                  decoration: const InputDecoration(labelText: 'Kapasite'),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: widthController,
+                        decoration: const InputDecoration(
+                          labelText: 'Genişlik (px)',
+                        ),
+                        keyboardType: TextInputType.number,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: heightController,
+                        decoration: const InputDecoration(
+                          labelText: 'Yükseklik (px)',
+                        ),
+                        keyboardType: TextInputType.number,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Boyut, kat planı ekranında "Kaydet" butonuna basıldığında uygulanır.',
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                  ),
+                ),
+                if (existing != null) ...[
+                  const SizedBox(height: 12),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Aktif'),
+                    value: isActive,
+                    onChanged: (val) => setDialogState(() => isActive = val),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
           actions: [
             TextButton(
@@ -363,6 +530,12 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen>
               onPressed: () async {
                 final number = int.tryParse(numberController.text);
                 final capacity = int.tryParse(capacityController.text);
+                final width = double.tryParse(
+                  widthController.text,
+                )?.clamp(40, 400);
+                final height = double.tryParse(
+                  heightController.text,
+                )?.clamp(40, 400);
                 if (number == null || capacity == null) return;
 
                 try {
@@ -380,6 +553,15 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen>
                       isActive: isActive,
                     );
                   }
+
+                  if (width != null && height != null) {
+                    _pendingSizeOverride = (
+                      tableNumber: number,
+                      width: width.toDouble(),
+                      height: height.toDouble(),
+                    );
+                  }
+
                   if (dialogContext.mounted) Navigator.pop(dialogContext);
                   _refreshAfterMutation();
                 } on ApiException catch (e) {
@@ -530,16 +712,32 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen>
             children: [
               _buildHintBar(),
               Expanded(
-                child: Row(
-                  children: [
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final wide = constraints.maxWidth >= _sidebarBreakpoint;
+
+                    // Dar ekranda masa detayı artık ayrı bir sayfada
+                    // gösteriliyor; yan panel seçimi burada anlamsız kalır,
+                    // temizleyelim (örn. pencere daraltıldığında).
+                    if (!wide && _selectedTableId != null) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) setState(() => _selectedTableId = null);
+                      });
+                    }
+
                     // Canvas Expanded ile kalan tüm genişliği alır; sidebar/özet
                     // panel sabit genişlikte olduğundan toplamda her zaman doğru
                     // oranlanır — ayrı yüzde hesabına gerek yoktur.
-                    Expanded(child: _buildCanvas()),
-                    _selectedTableId != null
-                        ? _buildSidebar(tablesAsync.valueOrNull)
-                        : _buildSummaryPanel(),
-                  ],
+                    return Row(
+                      children: [
+                        Expanded(child: _buildCanvas(wide)),
+                        if (wide)
+                          _selectedTableId != null
+                              ? _buildSidebar(tablesAsync.valueOrNull)
+                              : _buildSummaryPanel(),
+                      ],
+                    );
+                  },
                 ),
               ),
             ],
@@ -641,7 +839,7 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen>
 
   // ─── Canvas ──────────────────────────────────────────────────────────────────
 
-  Widget _buildCanvas() {
+  Widget _buildCanvas(bool wide) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final viewportSize = Size(constraints.maxWidth, constraints.maxHeight);
@@ -683,6 +881,7 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen>
                 child: _buildCanvasContent(
                   LayoutConstants.canvasWidth,
                   LayoutConstants.canvasHeight,
+                  wide,
                 ),
               ),
             ),
@@ -702,7 +901,7 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen>
     );
   }
 
-  Widget _buildCanvasContent(double width, double height) {
+  Widget _buildCanvasContent(double width, double height, bool wide) {
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onTap: () => setState(() => _selectedTableId = null),
@@ -719,7 +918,7 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen>
           child: Stack(
             children: [
               if (_layouts != null)
-                ..._layouts!.map((t) => _buildTableWidget(t)),
+                ..._layouts!.map((t) => _buildTableWidget(t, wide)),
             ],
           ),
         ),
@@ -729,7 +928,7 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen>
 
   // ─── Masa Widget ──────────────────────────────────────────────────────────────
 
-  Widget _buildTableWidget(TableLayoutResponseDto t) {
+  Widget _buildTableWidget(TableLayoutResponseDto t, bool wide) {
     final isSelected = _selectedTableId == t.tableId;
     final isDraggingThis = _drag?.tableId == t.tableId;
 
@@ -738,13 +937,7 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen>
       top: t.positionY.toDouble(),
       child: GestureDetector(
         onDoubleTap: () => _toggleShape(t.tableId),
-        onTap: () {
-          setState(() {
-            _selectedTableId = (_selectedTableId == t.tableId)
-                ? null
-                : t.tableId;
-          });
-        },
+        onTap: () => _handleTableTap(t, wide),
         onPanStart: (details) {
           final RenderBox box = context.findRenderObject() as RenderBox;
           final local = box.globalToLocal(details.globalPosition);
@@ -918,7 +1111,7 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen>
     );
   }
 
-  // ─── Sağ panel (seçili masa: bilgi + CRUD + QR) ──────────────────────────────
+  // ─── Sağ panel (seçili masa: bilgi + CRUD + QR) — geniş ekran ────────────────
 
   Widget _buildSidebar(List<TableResponseDto>? allTables) {
     final t = _layouts?.where((x) => x.tableId == _selectedTableId).firstOrNull;
@@ -963,140 +1156,152 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen>
               ),
             ),
             Divider(height: 1, color: Colors.grey.shade200),
-            // Bilgi satırları
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _InfoRow(label: 'Masa No', value: '#${t.tableNumber}'),
-                  _InfoRow(label: 'Kapasite', value: '${t.capacity} kişi'),
-                  _InfoRow(
-                    label: 'Durum',
-                    value: _statusLabel(t.status.name),
-                    valueColor: _statusColor(t.status.name),
-                  ),
-                  _InfoRow(
-                    label: 'Şekil',
-                    value: t.shape == 'circle' ? 'Yuvarlak' : 'Dikdörtgen',
-                  ),
-                  _InfoRow(
-                    label: 'Konum',
-                    value: '${t.positionX}, ${t.positionY}',
-                  ),
-                  if (fullTable != null)
-                    _InfoRow(
-                      label: 'Aktif',
-                      value: fullTable.isActive ? 'Evet' : 'Hayır',
-                    ),
-                ],
-              ),
-            ),
-            Divider(height: 1, color: Colors.grey.shade200),
-            // Eylemler
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                children: [
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: () => _toggleShape(t.tableId),
-                      icon: Icon(
-                        t.shape == 'circle'
-                            ? Icons.crop_square_outlined
-                            : Icons.circle_outlined,
-                        size: 16,
-                      ),
-                      label: Text(
-                        t.shape == 'circle' ? 'Dikdörtgen yap' : 'Yuvarlak yap',
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                    ),
-                  ),
-                  if (fullTable != null) ...[
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: () => _showTableForm(existing: fullTable),
-                        icon: const Icon(Icons.edit_outlined, size: 16),
-                        label: const Text(
-                          'Düzenle',
-                          style: TextStyle(fontSize: 13),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: () => _showQrDialog(fullTable),
-                        icon: const Icon(Icons.qr_code, size: 16),
-                        label: const Text(
-                          'QR Göster',
-                          style: TextStyle(fontSize: 13),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: () => _confirmDelete(fullTable),
-                        icon: const Icon(
-                          Icons.delete_outline,
-                          size: 16,
-                          color: Colors.red,
-                        ),
-                        label: const Text(
-                          'Sil',
-                          style: TextStyle(fontSize: 13, color: Colors.red),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          side: BorderSide(color: Colors.red.shade200),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ] else
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Text(
-                        'Masa detayları yükleniyor…',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey.shade500,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
+            _buildTableInfoAndActions(t, fullTable),
           ],
         ),
       ),
+    );
+  }
+
+  /// Bilgi satırları + eylem butonları. Hem geniş ekrandaki docked sidebar'da
+  /// (_buildSidebar) hem de dar ekranda açılan tam sayfa detayda
+  /// (_openFullDetail) aynen kullanılır.
+  Widget _buildTableInfoAndActions(
+    TableLayoutResponseDto t,
+    TableResponseDto? fullTable,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _InfoRow(label: 'Masa No', value: '#${t.tableNumber}'),
+              _InfoRow(label: 'Kapasite', value: '${t.capacity} kişi'),
+              _InfoRow(
+                label: 'Durum',
+                value: _statusLabel(t.status.name),
+                valueColor: _statusColor(t.status.name),
+              ),
+              _InfoRow(
+                label: 'Şekil',
+                value: t.shape == 'circle' ? 'Yuvarlak' : 'Dikdörtgen',
+              ),
+              _InfoRow(
+                label: 'Boyut',
+                value:
+                    '${t.width.toStringAsFixed(0)} × ${t.height.toStringAsFixed(0)} px',
+              ),
+              _InfoRow(label: 'Konum', value: '${t.positionX}, ${t.positionY}'),
+              if (fullTable != null)
+                _InfoRow(
+                  label: 'Aktif',
+                  value: fullTable.isActive ? 'Evet' : 'Hayır',
+                ),
+            ],
+          ),
+        ),
+        Divider(height: 1, color: Colors.grey.shade200),
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            children: [
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => _toggleShape(t.tableId),
+                  icon: Icon(
+                    t.shape == 'circle'
+                        ? Icons.crop_square_outlined
+                        : Icons.circle_outlined,
+                    size: 16,
+                  ),
+                  label: Text(
+                    t.shape == 'circle' ? 'Dikdörtgen yap' : 'Yuvarlak yap',
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+              if (fullTable != null) ...[
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showTableForm(existing: fullTable),
+                    icon: const Icon(Icons.edit_outlined, size: 16),
+                    label: const Text(
+                      'Düzenle',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showQrDialog(fullTable),
+                    icon: const Icon(Icons.qr_code, size: 16),
+                    label: const Text(
+                      'QR Göster',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _confirmDelete(fullTable),
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      size: 16,
+                      color: Colors.red,
+                    ),
+                    label: const Text(
+                      'Sil',
+                      style: TextStyle(fontSize: 13, color: Colors.red),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      side: BorderSide(color: Colors.red.shade200),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+              ] else
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    'Masa detayları yükleniyor…',
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
