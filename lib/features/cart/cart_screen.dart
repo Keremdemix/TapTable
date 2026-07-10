@@ -6,6 +6,12 @@ import '../../core/session/session_provider.dart';
 import '../orders/order_models.dart';
 import '../orders/order_provider.dart';
 import 'cart_provider.dart';
+import '../payment/payment_provider.dart';
+import '../payment/select_items_screen.dart';
+import '../payment/split_payment_screen.dart';
+import '../payment/buyer_info_sheet.dart';
+import '../payment/checkout_pending_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class CartScreen extends ConsumerStatefulWidget {
   const CartScreen({super.key});
@@ -809,14 +815,59 @@ Color colorFromHex(String hex) {
   return Color(int.parse(buffer.toString(), radix: 16));
 }
 
-class _PaymentOptionsRow extends StatelessWidget {
+class _PaymentOptionsRow extends ConsumerWidget {
   final Color primary;
   final Color accent;
 
   const _PaymentOptionsRow({required this.primary, required this.accent});
 
+  Future<void> _startFullCheckout(BuildContext context, WidgetRef ref) async {
+    final session = ref.read(customerSessionProvider).value;
+    if (session == null) return;
+
+    final buyer = await showBuyerInfoSheet(context, accent);
+    if (buyer == null) return;
+
+    try {
+      final apiClient = ref.read(apiClientProvider);
+      final sessionKey = await ref.read(sessionStorageProvider).getToken();
+
+      final json = await apiClient.createIyzicoCheckout(
+        session.tableId,
+        sessionKey: sessionKey!,
+        buyerName: buyer.name,
+        buyerSurname: buyer.surname,
+        buyerGsmNumber: buyer.gsmNumber,
+        buyerEmail: buyer.email,
+      );
+
+      final url = json['paymentPageUrl'] as String;
+
+      await launchUrl(Uri.parse(url), webOnlyWindowName: '_blank');
+
+      if (context.mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) =>
+                CheckoutPendingScreen(primary: primary, accent: accent),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Ödeme başlatılamadı: $e')));
+      }
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final stateAsync = ref.watch(paymentStateProvider);
+    final hasActivePlan = stateAsync.value?.hasActiveSplitPlan ?? false;
+
     return Row(
       children: [
         Expanded(
@@ -825,7 +876,15 @@ class _PaymentOptionsRow extends StatelessWidget {
             label: 'Seçerek Öde',
             color: primary,
             filled: false,
-            onTap: () {}, // sonraki adım
+            onTap: hasActivePlan
+                ? null
+                : () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          SelectItemsScreen(primary: primary, accent: accent),
+                    ),
+                  ),
           ),
         ),
         const SizedBox(width: 8),
@@ -835,7 +894,13 @@ class _PaymentOptionsRow extends StatelessWidget {
             label: 'Bölerek Öde',
             color: primary,
             filled: false,
-            onTap: () {}, // sonraki adım
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    SplitPaymentScreen(primary: primary, accent: accent),
+              ),
+            ),
           ),
         ),
         const SizedBox(width: 8),
@@ -845,7 +910,9 @@ class _PaymentOptionsRow extends StatelessWidget {
             label: 'Hepsini Öde',
             color: accent,
             filled: true,
-            onTap: () {}, // sonraki adım
+            onTap: hasActivePlan
+                ? null
+                : () => _startFullCheckout(context, ref),
           ),
         ),
       ],
@@ -858,7 +925,7 @@ class _PaymentButton extends StatelessWidget {
   final String label;
   final Color color;
   final bool filled;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   const _PaymentButton({
     required this.icon,
