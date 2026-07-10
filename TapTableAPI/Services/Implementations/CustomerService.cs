@@ -8,38 +8,44 @@ public class CustomerService : ICustomerService
 {
     private readonly ITableRepository _tableRepository;
     private readonly IQrSessionRepository _qrSessionRepository;
+    private readonly IRestaurantRepository _restaurantRepository;
 
     public CustomerService(
         ITableRepository tableRepository,
-        IQrSessionRepository qrSessionRepository)
+        IQrSessionRepository qrSessionRepository,
+        IRestaurantRepository restaurantRepository)
     {
         _tableRepository = tableRepository;
         _qrSessionRepository = qrSessionRepository;
+        _restaurantRepository = restaurantRepository;
     }
 
-    public async Task<CustomerSessionResponseDto> StartSessionAsync(int tableId)
+    public async Task<CustomerSessionResponseDto> ResolveSessionAsync(string token)
     {
-        var table = await _tableRepository.GetByIdAsync(tableId)
-            ?? throw new KeyNotFoundException($"Masa bulunamadı: {tableId}");
+        if (string.IsNullOrWhiteSpace(token))
+            throw new UnauthorizedAccessException("Geçersiz oturum.");
+
+        var session = await _qrSessionRepository.GetActiveByKeyAsync(token)
+            ?? throw new UnauthorizedAccessException("Oturum geçersiz veya süresi dolmuş.");
+
+        var table = await _tableRepository.GetByIdAsync(session.TableId)
+            ?? throw new KeyNotFoundException($"Masa bulunamadı: {session.TableId}");
 
         if (!table.IsActive)
             throw new InvalidOperationException("Bu masa şu an aktif değil.");
 
-        var session = await _qrSessionRepository.GetActiveByTableIdAsync(tableId);
-
-        // Normalde her masanın aktif bir session'ı olmalı (masa oluşturulurken / sipariş
-        // kapanırken otomatik açılıyor). Yoksa kendiliğinden bir yenisini açıyoruz —
-        // müşteri bu yüzden hata almasın.
-        session ??= await _qrSessionRepository.RotateSessionAsync(tableId, table.RestaurantId);
+        var restaurant = await _restaurantRepository.GetByIdAsync(session.RestaurantId)
+            ?? throw new KeyNotFoundException("Restoran bulunamadı.");
 
         return new CustomerSessionResponseDto
         {
+            RestaurantId = restaurant.Id,
             TableId = table.Id,
             TableNumber = table.TableNumber,
-            RestaurantId = table.RestaurantId,
-            RestaurantName = table.Restaurant?.Name ?? string.Empty,
-            SessionKey = session.SessionKey,
-            TableStatus = table.Status.ToString()
+            RestaurantName = restaurant.Name,
+            LogoUrl = restaurant.LogoUrl,
+            PrimaryColorHex = restaurant.PrimaryColorHex,
+            AccentColorHex = restaurant.AccentColorHex
         };
     }
 }

@@ -12,15 +12,18 @@ public class MenuService : IMenuService
     private readonly ICategoryRepository _categoryRepository;
     private readonly IMenuItemRepository _menuItemRepository;
     private readonly ITableRepository _tableRepository;
+    private readonly IQrSessionRepository _qrSessionRepository;
 
     public MenuService(
         ICategoryRepository categoryRepository,
         IMenuItemRepository menuItemRepository,
-        ITableRepository tableRepository)
+        ITableRepository tableRepository,
+        IQrSessionRepository qrSessionRepository)
     {
         _categoryRepository = categoryRepository;
         _menuItemRepository = menuItemRepository;
         _tableRepository = tableRepository;
+        _qrSessionRepository = qrSessionRepository;
     }
 
     // ── Kategori — Admin ─────────────────────────────────────────────────
@@ -183,10 +186,13 @@ public class MenuService : IMenuService
 
     // ── Müşteri — Public ─────────────────────────────────────────────────
 
-    public async Task<PublicMenuResponseDto> GetPublicMenuByTableAsync(int tableId)
+    public async Task<PublicMenuResponseDto> GetPublicMenuByTokenAsync(string token)
     {
-        var table = await _tableRepository.GetByIdAsync(tableId)
-            ?? throw new KeyNotFoundException($"Masa bulunamadı: {tableId}");
+        var session = await _qrSessionRepository.GetActiveByKeyAsync(token)
+            ?? throw new UnauthorizedAccessException("Oturum geçersiz veya süresi dolmuş.");
+
+        var table = await _tableRepository.GetByIdAsync(session.TableId)
+            ?? throw new KeyNotFoundException($"Masa bulunamadı: {session.TableId}");
 
         var categories = await _categoryRepository.GetPublicMenuAsync(table.RestaurantId);
 
@@ -209,7 +215,6 @@ public class MenuService : IMenuService
             }).ToList()
         };
     }
-
     // ── Helpers ──────────────────────────────────────────────────────────
 
     private static CategoryResponseDto MapToDto(Category c, int itemCount) => new()

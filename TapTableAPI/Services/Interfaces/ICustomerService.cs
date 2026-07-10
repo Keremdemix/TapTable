@@ -8,5 +8,5 @@ public interface ICustomerService
     /// QR okutulduğunda çağrılır — masanın aktif sessionKey'ini döner.
     /// Aktif session yoksa kendiliğinden bir yenisi açılır (self-healing).
     /// </summary>
-    Task<CustomerSessionResponseDto> StartSessionAsync(int tableId);
+    Task<CustomerSessionResponseDto> ResolveSessionAsync(string token);
 }

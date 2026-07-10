@@ -7,9 +7,9 @@ namespace TapTable.Api.Services.Interfaces;
 public interface IOrderService
 {
     // Müşteri — Public (QR session)
-    Task<OrderResponseDto> PlaceOrderAsync(int tableId, PlaceOrderRequestDto request);
-    Task<OrderResponseDto?> GetActiveOrderAsync(int tableId, string sessionKey);
-    Task<OrderResponseDto> TrackOrderAsync(int tableId, string sessionKey, int orderId);
+    Task<OrderResponseDto> PlaceOrderAsync(string token, PlaceOrderRequestDto request);
+    Task<OrderResponseDto?> GetActiveOrderAsync(string token);
+    Task<OrderResponseDto> TrackOrderAsync(string token, int orderId);
 
     // Personel — Waiter/Kitchen/Admin
     Task<OrderResponseDto> CreateOrderByStaffAsync(int restaurantId, int? waiterId, StaffCreateOrderRequestDto request);

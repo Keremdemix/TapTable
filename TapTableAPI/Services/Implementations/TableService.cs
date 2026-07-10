@@ -55,21 +55,23 @@ public class TableService : ITableService
 
         var created = await _tableRepository.CreateAsync(table);
 
-        created.QrCodeUrl = $"{_customerBaseUrl}/table/{created.Id}";
-        await _tableRepository.UpdateAsync(created);
-
-        await _qrSessionRepository.CreateAsync(new QrSession
+        // Session önce oluşturulur, QR URL token'a göre üretilir — table id URL'de yer almaz
+        var session = new QrSession
         {
             TableId = created.Id,
             RestaurantId = restaurantId,
             SessionKey = NewSessionKey(),
             IsActive = true,
             CreatedAt = DateTime.UtcNow
-        });
+        };
+        await _qrSessionRepository.CreateAsync(session);
 
-        // Kat planında varsayılan bir konum ver — admin sonra sürükleyip yerleştirir
+        created.QrCodeUrl = $"{_customerBaseUrl}/menu?token={session.SessionKey}";
+        await _tableRepository.UpdateAsync(created);
+
+        // Kat planı kısmı aynı kalıyor...
         var existingCount = (await _tableRepository.GetAllAsync(restaurantId)).Count();
-        var index = existingCount - 1; // yeni eklenen masa dahil say, 0-bazlı yap
+        var index = existingCount - 1;
         var col = index % 5;
         var row = index / 5;
 
@@ -145,15 +147,18 @@ public class TableService : ITableService
             CreatedAt = DateTime.UtcNow
         });
 
+        // Eski token'ı taşıyan URL artık geçersiz — table.QrCodeUrl yeni token ile güncellenir
+        table.QrCodeUrl = $"{_customerBaseUrl}/menu?token={newKey}";
+        var updated = await _tableRepository.UpdateAsync(table);
+
         return new RegenerateQrResponseDto
         {
-            TableId = table.Id,
-            TableNumber = table.TableNumber,
-            QrCodeUrl = table.QrCodeUrl,
+            TableId = updated.Id,
+            TableNumber = updated.TableNumber,
+            QrCodeUrl = updated.QrCodeUrl,
             NewSessionKey = newKey
         };
     }
-
     // ── Kat Planı ────────────────────────────────────────────────────────
 
     public async Task<IEnumerable<TableLayoutResponseDto>> GetLayoutAsync(int restaurantId)
