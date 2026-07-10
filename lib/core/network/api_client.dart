@@ -7,30 +7,35 @@ class ApiClient {
   final SessionStorage _sessionStorage;
 
   ApiClient(this._sessionStorage)
-      : dio = Dio(BaseOptions(
+    : dio = Dio(
+        BaseOptions(
           baseUrl: const String.fromEnvironment(
             'API_BASE_URL',
             defaultValue: 'http://localhost:5014/api',
           ),
           connectTimeout: const Duration(seconds: 10),
           receiveTimeout: const Duration(seconds: 10),
-        )) {
-    dio.interceptors.add(InterceptorsWrapper(
-      onRequest: (options, handler) async {
-        // /public/customer/session hariç tüm isteklere token header'ı eklenir.
-        // O endpoint'in kendi token'ını query'de zaten taşıdığı için hariç tutuluyor.
-        if (!options.path.contains('/customer/session')) {
-          final token = await _sessionStorage.getToken();
-          if (token != null) {
-            options.headers['X-QR-Token'] = token;
+        ),
+      ) {
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) async {
+          if (!options.path.contains('/customer/session')) {
+            final token = await _sessionStorage.getToken();
+            if (token != null) {
+              options.headers['X-QR-Token'] = token;
+            }
           }
-        }
-        handler.next(options);
-      },
-    ));
+          handler.next(options);
+        },
+      ),
+    );
   }
 
-  Future<Map<String, dynamic>> get(String path, {Map<String, dynamic>? query}) async {
+  Future<Map<String, dynamic>> get(
+    String path, {
+    Map<String, dynamic>? query,
+  }) async {
     try {
       final res = await dio.get(path, queryParameters: query);
       return res.data;
@@ -48,6 +53,15 @@ class ApiClient {
     }
   }
 
+  /// 204 No Content dönen endpoint'ler için (örn. bölüşüm planı iptali).
+  Future<void> postNoContent(String path, {dynamic data}) async {
+    try {
+      await dio.post(path, data: data);
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
   Future<Map<String, dynamic>> resolveSession(String token) {
     return get('/public/customer/session', query: {'token': token});
   }
@@ -57,5 +71,79 @@ class ApiClient {
     String? note,
   }) {
     return post('/public/orders', data: {'items': items, 'note': note});
+  }
+
+  // ── Ödeme ──────────────────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> getPaymentState(int tableId, String sessionKey) {
+    return get(
+      '/public/payments/$tableId/state',
+      query: {'sessionKey': sessionKey},
+    );
+  }
+
+  Future<Map<String, dynamic>> createSplitPlan(
+    int tableId, {
+    required String sessionKey,
+    required int totalPeople,
+  }) {
+    return post(
+      '/public/payments/$tableId/split-plan',
+      data: {'sessionKey': sessionKey, 'totalPeople': totalPeople},
+    );
+  }
+
+  Future<void> cancelSplitPlan(
+    int tableId,
+    int planId, {
+    required String sessionKey,
+  }) {
+    return postNoContent(
+      '/public/payments/$tableId/split-plan/$planId/cancel',
+      data: {'sessionKey': sessionKey},
+    );
+  }
+
+  Future<Map<String, dynamic>> paySplitShare(
+    int tableId,
+    int planId, {
+    required String sessionKey,
+    required int shares,
+  }) {
+    return post(
+      '/public/payments/$tableId/split-plan/$planId/pay-share',
+      data: {'sessionKey': sessionKey, 'shares': shares},
+    );
+  }
+
+  Future<Map<String, dynamic>> paySelectedItems(
+    int tableId, {
+    required String sessionKey,
+    required List<Map<String, dynamic>> items,
+  }) {
+    return post(
+      '/public/payments/$tableId/pay-selected',
+      data: {'sessionKey': sessionKey, 'items': items},
+    );
+  }
+
+  Future<Map<String, dynamic>> createIyzicoCheckout(
+    int tableId, {
+    required String sessionKey,
+    required String buyerName,
+    required String buyerSurname,
+    required String buyerGsmNumber,
+    String? buyerEmail,
+  }) {
+    return post(
+      '/public/payments/$tableId/iyzico-checkout',
+      data: {
+        'sessionKey': sessionKey,
+        'buyerName': buyerName,
+        'buyerSurname': buyerSurname,
+        'buyerGsmNumber': buyerGsmNumber,
+        'buyerEmail': buyerEmail,
+      },
+    );
   }
 }
