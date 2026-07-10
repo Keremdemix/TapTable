@@ -58,4 +58,10 @@ public class TableRepository : ITableRepository
             .Include(t => t.Restaurant)
             .FirstOrDefaultAsync(t => t.Id == id && t.IsActive);
     }
+    public async Task<RestaurantTable?> GetByQrTokenAsync(string qrToken)
+    {
+        return await _context.RestaurantTables
+            .Include(t => t.Restaurant)
+            .FirstOrDefaultAsync(t => t.QrToken == qrToken && t.IsActive);
+    }
 }

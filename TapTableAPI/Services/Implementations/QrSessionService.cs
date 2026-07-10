@@ -31,10 +31,13 @@ public class QrSessionService : IQrSessionService
         var session = await _qrRepository.GetActiveByTableIdAsync(tableId)
             ?? throw new KeyNotFoundException("Aktif oturum bulunamadı.");
 
+        var table = await _tableRepository.GetByIdAsync(tableId)
+            ?? throw new KeyNotFoundException("Masa bulunamadı.");
+
         var restaurant = await _restaurantRepository.GetByIdAsync(session.RestaurantId)
             ?? throw new KeyNotFoundException("Restoran bulunamadı.");
 
-        return Map(session, restaurant);
+        return Map(session, table, restaurant);
     }
 
     public async Task<QrSessionResponseDto> CreateSessionAsync(CreateQrSessionRequestDto request)
@@ -56,7 +59,7 @@ public class QrSessionService : IQrSessionService
         var restaurant = await _restaurantRepository.GetByIdAsync(table.RestaurantId)
             ?? throw new KeyNotFoundException("Restoran bulunamadı.");
 
-        return Map(session, restaurant);
+        return Map(session, table, restaurant);
     }
 
     /// <summary>
@@ -69,13 +72,27 @@ public class QrSessionService : IQrSessionService
         if (string.IsNullOrWhiteSpace(token))
             throw new UnauthorizedAccessException("Geçersiz oturum.");
 
-        var session = await _qrRepository.GetActiveByKeyAsync(token)
+        // token artık QrToken — masa buradan bulunur, SessionKey'den değil
+        var table = await _tableRepository.GetByQrTokenAsync(token)
             ?? throw new UnauthorizedAccessException("Oturum geçersiz veya süresi dolmuş.");
 
-        var table = await _tableRepository.GetByIdAsync(session.TableId)
-            ?? throw new KeyNotFoundException("Masa bulunamadı.");
+        var session = await _qrRepository.GetActiveByTableIdAsync(table.Id);
 
-        var restaurant = await _restaurantRepository.GetByIdAsync(session.RestaurantId)
+        if (session is null)
+        {
+            // Aktif session yok (ilk kez okutuluyor ya da önceki rotate olmuş) — yenisi oluşturulur
+            session = new QrSession
+            {
+                TableId = table.Id,
+                RestaurantId = table.RestaurantId,
+                SessionKey = Guid.NewGuid().ToString("N"),
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            };
+            await _qrRepository.CreateAsync(session);
+        }
+
+        var restaurant = await _restaurantRepository.GetByIdAsync(table.RestaurantId)
             ?? throw new KeyNotFoundException("Restoran bulunamadı.");
 
         return new CustomerSessionResponseDto
@@ -90,7 +107,8 @@ public class QrSessionService : IQrSessionService
         };
     }
 
-    private QrSessionResponseDto Map(QrSession s, Restaurant r)
+
+    private QrSessionResponseDto Map(QrSession s, RestaurantTable table, Restaurant r)
     {
         return new QrSessionResponseDto
         {
@@ -99,7 +117,8 @@ public class QrSessionService : IQrSessionService
             SessionKey = s.SessionKey,
             IsActive = s.IsActive,
             CreatedAt = s.CreatedAt,
-            QrUrl = $"{_customerBaseUrl}/menu?token={s.SessionKey}",
+            // ARTIK SABİT — table.QrToken kullanılıyor, s.SessionKey değil.
+            QrUrl = $"{_customerBaseUrl}/menu?token={table.QrToken}",
             Restaurant = new RestaurantBrandingDto
             {
                 Id = r.Id,

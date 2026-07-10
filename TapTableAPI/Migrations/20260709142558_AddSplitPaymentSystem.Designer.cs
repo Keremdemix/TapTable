@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using TapTable.Api.Data;
 
@@ -11,9 +12,11 @@ using TapTable.Api.Data;
 namespace TapTableAPI.Migrations
 {
     [DbContext(typeof(TapTableDbContext))]
-    partial class TapTableDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260709142558_AddSplitPaymentSystem")]
+    partial class AddSplitPaymentSystem
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -421,11 +424,6 @@ namespace TapTableAPI.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
-                    b.Property<string>("QrToken")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)");
-
                     b.Property<int>("RestaurantId")
                         .HasColumnType("int");
 
@@ -443,9 +441,6 @@ namespace TapTableAPI.Migrations
                         .HasColumnType("datetime2");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("QrToken")
-                        .IsUnique();
 
                     b.HasIndex("RestaurantId", "TableNumber")
                         .IsUnique()

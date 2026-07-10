@@ -91,4 +91,14 @@ public class OrderRepository : IOrderRepository
             .Include(o => o.Waiter)
             .FirstOrDefaultAsync(o => o.Id == orderId);
     }
+    public async Task<Order?> GetLatestByTableAsync(int tableId)
+    {
+        return await _context.Orders
+            .Include(o => o.Items).ThenInclude(i => i.MenuItem)
+            .Include(o => o.Table)
+            .Include(o => o.Waiter)
+            .Where(o => o.TableId == tableId)
+            .OrderByDescending(o => o.CreatedAt)
+            .FirstOrDefaultAsync();
+    }
 }

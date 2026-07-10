@@ -1,3 +1,4 @@
+using TapTable.Api.Data.Entities;
 using TapTable.Api.DTOs.Response.Customer;
 using TapTable.Api.Repositories.Interfaces;
 using TapTable.Api.Services.Interfaces;
@@ -20,21 +21,40 @@ public class CustomerService : ICustomerService
         _restaurantRepository = restaurantRepository;
     }
 
-    public async Task<CustomerSessionResponseDto> ResolveSessionAsync(string token)
+    /// <summary>
+    /// QR'daki token artık masaya SABİT bağlı bir QrToken — SessionKey değil.
+    /// Bu sayede ödeme sonrası SessionKey rotate olsa bile fiziksel QR
+    /// kod hiç değişmeden çalışmaya devam eder: masa bulunur, o masanın
+    /// güncel aktif session'ı varsa kullanılır, yoksa yeni bir tane
+    /// (find-or-create) oluşturulur.
+    /// </summary>
+    public async Task<CustomerSessionResponseDto> ResolveSessionAsync(string qrToken)
     {
-        if (string.IsNullOrWhiteSpace(token))
+        if (string.IsNullOrWhiteSpace(qrToken))
             throw new UnauthorizedAccessException("Geçersiz oturum.");
 
-        var session = await _qrSessionRepository.GetActiveByKeyAsync(token)
-            ?? throw new UnauthorizedAccessException("Oturum geçersiz veya süresi dolmuş.");
-
-        var table = await _tableRepository.GetByIdAsync(session.TableId)
-            ?? throw new KeyNotFoundException($"Masa bulunamadı: {session.TableId}");
+        var table = await _tableRepository.GetByQrTokenAsync(qrToken)
+            ?? throw new UnauthorizedAccessException("Geçersiz QR kod.");
 
         if (!table.IsActive)
             throw new InvalidOperationException("Bu masa şu an aktif değil.");
 
-        var restaurant = await _restaurantRepository.GetByIdAsync(session.RestaurantId)
+        var session = await _qrSessionRepository.GetActiveByTableIdAsync(table.Id);
+
+        if (session is null)
+        {
+            session = new QrSession
+            {
+                TableId = table.Id,
+                RestaurantId = table.RestaurantId,
+                SessionKey = Guid.NewGuid().ToString("N"),
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            };
+            await _qrSessionRepository.CreateAsync(session);
+        }
+
+        var restaurant = await _restaurantRepository.GetByIdAsync(table.RestaurantId)
             ?? throw new KeyNotFoundException("Restoran bulunamadı.");
 
         return new CustomerSessionResponseDto
@@ -45,7 +65,8 @@ public class CustomerService : ICustomerService
             RestaurantName = restaurant.Name,
             LogoUrl = restaurant.LogoUrl,
             PrimaryColorHex = restaurant.PrimaryColorHex,
-            AccentColorHex = restaurant.AccentColorHex
+            AccentColorHex = restaurant.AccentColorHex,
+            SessionKey = session.SessionKey
         };
     }
 }

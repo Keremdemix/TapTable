@@ -10,4 +10,5 @@ public interface IPaymentRepository
     Task<Payment> CreateAsync(Payment payment);
     Task<Payment> UpdateAsync(Payment payment);
     Task<Payment?> GetByIyzicoTokenAsync(string token);
+    Task<Payment?> GetByIdWithDetailsAsync(int paymentId);
 }

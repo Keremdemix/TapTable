@@ -80,4 +80,9 @@ public class QrSessionRepository : IQrSessionRepository
         await _context.SaveChangesAsync();
         return newSession;
     }
+    public async Task<QrSession?> GetByKeyIncludingInactiveAsync(string sessionKey)
+    {
+        return await _context.QrSessions
+            .FirstOrDefaultAsync(s => s.SessionKey == sessionKey);
+    }
 }

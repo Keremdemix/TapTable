@@ -17,6 +17,7 @@ public class PaymentService : IPaymentService
     private readonly ITableRepository _tableRepository;
     private readonly IQrSessionRepository _qrSessionRepository;
     private readonly IRestaurantRepository _restaurantRepository;
+    private readonly ISplitPaymentPlanRepository _splitPlanRepository;
     private readonly IConfiguration _configuration;
     private readonly ILogger<PaymentService> _logger;
 
@@ -26,6 +27,7 @@ public class PaymentService : IPaymentService
         ITableRepository tableRepository,
         IQrSessionRepository qrSessionRepository,
         IRestaurantRepository restaurantRepository,
+        ISplitPaymentPlanRepository splitPlanRepository,
         IConfiguration configuration,
         ILogger<PaymentService> logger)
     {
@@ -34,6 +36,7 @@ public class PaymentService : IPaymentService
         _tableRepository = tableRepository;
         _qrSessionRepository = qrSessionRepository;
         _restaurantRepository = restaurantRepository;
+        _splitPlanRepository = splitPlanRepository;
         _configuration = configuration;
         _logger = logger;
     }
@@ -105,18 +108,63 @@ public class PaymentService : IPaymentService
         };
     }
 
-    // ── Müşteri — iyzico Checkout Form ────────────────────────────────────
+    // ── Müşteri — Ödeme durumu (Seçerek/Bölerek/Hepsini Öde ekranı) ──────
 
-    public async Task<IyzicoCheckoutResponseDto> CreateIyzicoCheckoutAsync(
-        int tableId, InitiateIyzicoPaymentRequestDto request, string buyerIp)
+    public async Task<OrderPaymentStateResponseDto> GetOrderPaymentStateAsync(int tableId, string sessionKey)
     {
+        var table = await ValidateSessionForReadAsync(tableId, sessionKey);
+
+        var order = await _orderRepository.GetActiveOrderByTableAsync(table.Id);
+
+        // Aktif sipariş yoksa, YALNIZCA çok yakın zamanda (son 5 dk içinde)
+        // tamamen ödenmiş bir sipariş varsa onu göster — bu, tam ödeme sonrası
+        // session rotate edildiği anki kısa geçiş penceresi için gerekli.
+        // Masanın günler/saatler önceki eski geçmiş siparişlerini asla döndürmez,
+        // yoksa yeni bir müşteri QR okutur okutmaz "ödeme tamamlandı" görür.
+        if (order is null)
+        {
+            var latest = await _orderRepository.GetLatestByTableAsync(table.Id);
+            if (latest is not null
+                && latest.PaymentStatus == OrderPaymentStatus.Paid
+                && latest.UpdatedAt >= DateTime.UtcNow.AddMinutes(-5))
+            {
+                order = latest;
+            }
+        }
+
+        if (order is null)
+            throw new InvalidOperationException("Bu masada aktif sipariş bulunamadı.");
+
+        var paidSoFar = await _paymentRepository.GetSucceededTotalAsync(order.Id);
+        var activePlan = await _splitPlanRepository.GetActiveByOrderIdAsync(order.Id);
+
+        return new OrderPaymentStateResponseDto
+        {
+            OrderId = order.Id,
+            TotalPrice = order.TotalPrice,
+            PaidAmount = paidSoFar,
+            RemainingAmount = order.TotalPrice - paidSoFar,
+            PaymentStatus = order.PaymentStatus.ToString(),
+            Items = order.Items.Select(i => new PaymentStateItemDto
+            {
+                OrderItemId = i.Id,
+                MenuItemName = i.MenuItem?.Name ?? string.Empty,
+                UnitPrice = i.UnitPrice,
+                Quantity = i.Quantity,
+                PaidQuantity = i.PaidQuantity
+            }).ToList(),
+            ActiveSplitPlan = activePlan is null ? null : MapPlanToDto(activePlan)
+        };
+    }
+
+    // ── Müşteri — "Bölerek Öde" plan oluşturma / iptal ───────────────────
+
+    public async Task<SplitPaymentPlanResponseDto> CreateSplitPlanAsync(int tableId, CreateSplitPlanRequestDto request)
+    {
+        if (request.TotalPeople < 2)
+            throw new ArgumentException("Bölüşüm en az 2 kişi ile yapılabilir.");
+
         var table = await ValidateSessionAsync(tableId, request.SessionKey);
-
-        var restaurant = await _restaurantRepository.GetByIdAsync(table.RestaurantId)
-            ?? throw new KeyNotFoundException("Restoran bulunamadı.");
-
-        if (string.IsNullOrEmpty(restaurant.IyzicoSubMerchantKey) || !restaurant.IsIyzicoApproved)
-            throw new InvalidOperationException("Bu restoran henüz online ödeme almaya hazır değil.");
 
         var order = await _orderRepository.GetActiveOrderByTableAsync(table.Id)
             ?? throw new InvalidOperationException("Bu masada aktif sipariş bulunamadı.");
@@ -124,13 +172,211 @@ public class PaymentService : IPaymentService
         if (order.PaymentStatus == OrderPaymentStatus.Paid)
             throw new InvalidOperationException("Bu sipariş zaten ödenmiş.");
 
+        var existingPlan = await _splitPlanRepository.GetActiveByOrderIdAsync(order.Id);
+        if (existingPlan is not null)
+            throw new InvalidOperationException("Bu sipariş için zaten aktif bir bölüşüm planı var.");
+
         var paidSoFar = await _paymentRepository.GetSucceededTotalAsync(order.Id);
         var remaining = order.TotalPrice - paidSoFar;
 
         if (remaining <= 0)
             throw new InvalidOperationException("Ödenecek tutar kalmadı.");
 
-        var priceText = remaining.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+        var plan = new SplitPaymentPlan
+        {
+            OrderId = order.Id,
+            TotalPeople = request.TotalPeople,
+            TotalAmount = remaining,
+            SharesPaid = 0,
+            Status = SplitPlanStatus.Active,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        var created = await _splitPlanRepository.CreateAsync(plan);
+        return MapPlanToDto(created);
+    }
+
+    public async Task CancelSplitPlanAsync(int tableId, int planId, CancelSplitPlanRequestDto request)
+    {
+        await ValidateSessionAsync(tableId, request.SessionKey);
+
+        var plan = await _splitPlanRepository.GetByIdAsync(planId)
+            ?? throw new KeyNotFoundException($"Bölüşüm planı bulunamadı: {planId}");
+
+        if (plan.Order.TableId != tableId)
+            throw new UnauthorizedAccessException("Bu plana erişim yetkiniz yok.");
+
+        if (plan.Status != SplitPlanStatus.Active)
+            throw new InvalidOperationException("Bu plan zaten aktif değil.");
+
+        if (plan.SharesPaid > 0)
+            throw new InvalidOperationException("En az bir pay ödendiği için bölüşüm iptal edilemez.");
+
+        plan.Status = SplitPlanStatus.Cancelled;
+        await _splitPlanRepository.UpdateAsync(plan);
+    }
+
+    // ── Müşteri — "Bölerek Öde" pay ödemesi → doğrudan iyzico checkout ───
+
+    public async Task<IyzicoCheckoutResponseDto> PaySplitShareAsync(
+        int tableId, int planId, PaySplitShareRequestDto request, string buyerIp)
+    {
+        if (request.Shares < 1)
+            throw new ArgumentException("Pay sayısı en az 1 olmalı.");
+
+        var table = await ValidateSessionAsync(tableId, request.SessionKey);
+
+        var plan = await _splitPlanRepository.GetByIdAsync(planId)
+            ?? throw new KeyNotFoundException($"Bölüşüm planı bulunamadı: {planId}");
+
+        if (plan.Order.TableId != table.Id)
+            throw new UnauthorizedAccessException("Bu plana erişim yetkiniz yok.");
+
+        if (plan.Status != SplitPlanStatus.Active)
+            throw new InvalidOperationException("Bu bölüşüm planı artık aktif değil.");
+
+        var remainingShares = plan.TotalPeople - plan.SharesPaid;
+        if (request.Shares > remainingShares)
+            throw new InvalidOperationException($"En fazla {remainingShares} pay ödeyebilirsiniz.");
+
+        var amount = plan.TotalAmount / plan.TotalPeople * request.Shares;
+
+        var payment = new PaymentEntity
+        {
+            OrderId = plan.OrderId,
+            Amount = amount,
+            Method = PaymentMethod.Iyzico,
+            SplitType = SplitType.Equal,
+            Status = PaymentStatus.Pending,
+            SplitPaymentPlanId = plan.Id,
+            SharesCovered = request.Shares,
+            CreatedAt = DateTime.UtcNow
+        };
+        var created = await _paymentRepository.CreateAsync(payment);
+
+        // SharesPaid artışı webhook başarılı olduğunda SettleSucceededPaymentAsync'te yapılıyor.
+        return await InitiateIyzicoCheckoutForPaymentAsync(table, created, buyerIp);
+    }
+
+    // ── Müşteri — "Seçerek Öde" → doğrudan iyzico checkout ────────────────
+
+    public async Task<IyzicoCheckoutResponseDto> PaySelectedItemsAsync(
+        int tableId, PaySelectedItemsRequestDto request, string buyerIp)
+    {
+        if (request.Items is null || request.Items.Count == 0)
+            throw new ArgumentException("En az bir ürün seçilmeli.");
+
+        var table = await ValidateSessionAsync(tableId, request.SessionKey);
+
+        var order = await _orderRepository.GetActiveOrderByTableAsync(table.Id)
+            ?? throw new InvalidOperationException("Bu masada aktif sipariş bulunamadı.");
+
+        if (order.PaymentStatus == OrderPaymentStatus.Paid)
+            throw new InvalidOperationException("Bu sipariş zaten ödenmiş.");
+
+        var activePlan = await _splitPlanRepository.GetActiveByOrderIdAsync(order.Id);
+        if (activePlan is not null)
+            throw new InvalidOperationException(
+                "Eşit bölüşüm başlatıldığı için ürün seçerek ödeme yapılamaz.");
+
+        var paymentItems = new List<Data.Entities.PaymentItem>();
+        decimal amount = 0;
+
+        foreach (var line in request.Items)
+        {
+            if (line.Quantity <= 0)
+                throw new ArgumentException("Adet sıfırdan büyük olmalı.");
+
+            var item = order.Items.FirstOrDefault(i => i.Id == line.OrderItemId)
+                ?? throw new KeyNotFoundException($"Sipariş kalemi bulunamadı: {line.OrderItemId}");
+
+            var unpaid = item.Quantity - item.PaidQuantity;
+            if (line.Quantity > unpaid)
+                throw new InvalidOperationException(
+                    $"'{item.MenuItem?.Name}' için en fazla {unpaid} adet ödenebilir.");
+
+            amount += item.UnitPrice * line.Quantity;
+            paymentItems.Add(new Data.Entities.PaymentItem
+            {
+                OrderItemId = item.Id,
+                Quantity = line.Quantity
+            });
+        }
+
+        var payment = new PaymentEntity
+        {
+            OrderId = order.Id,
+            Amount = amount,
+            Method = PaymentMethod.Iyzico,
+            SplitType = SplitType.ByItem,
+            Status = PaymentStatus.Pending,
+            CreatedAt = DateTime.UtcNow,
+            PaymentItems = paymentItems
+        };
+
+        var created = await _paymentRepository.CreateAsync(payment);
+        return await InitiateIyzicoCheckoutForPaymentAsync(table, created, buyerIp);
+    }
+
+    // ── Müşteri — "Hepsini Öde" → doğrudan iyzico checkout ────────────────
+
+    public async Task<IyzicoCheckoutResponseDto> CreateIyzicoCheckoutAsync(
+        int tableId, InitiateIyzicoPaymentRequestDto request, string buyerIp)
+    {
+        var table = await ValidateSessionAsync(tableId, request.SessionKey);
+
+        var order = await _orderRepository.GetActiveOrderByTableAsync(table.Id)
+            ?? throw new InvalidOperationException("Bu masada aktif sipariş bulunamadı.");
+
+        if (order.PaymentStatus == OrderPaymentStatus.Paid)
+            throw new InvalidOperationException("Bu sipariş zaten ödenmiş.");
+
+        var activePlan = await _splitPlanRepository.GetActiveByOrderIdAsync(order.Id);
+        if (activePlan is not null)
+            throw new InvalidOperationException(
+                "Eşit bölüşüm başlatıldığı için tüm tutar tek seferde ödenemez.");
+
+        var paidSoFar = await _paymentRepository.GetSucceededTotalAsync(order.Id);
+        var remaining = order.TotalPrice - paidSoFar;
+
+        if (remaining <= 0)
+            throw new InvalidOperationException("Ödenecek tutar kalmadı.");
+
+        var payment = new PaymentEntity
+        {
+            OrderId = order.Id,
+            Amount = remaining,
+            Method = PaymentMethod.Iyzico,
+            SplitType = SplitType.Full,
+            Status = PaymentStatus.Pending,
+            CreatedAt = DateTime.UtcNow
+        };
+        var created = await _paymentRepository.CreateAsync(payment);
+
+        return await InitiateIyzicoCheckoutForPaymentAsync(table, created, buyerIp);
+    }
+
+    // ── iyzico checkout başlatma — Full/ByItem/Equal ortak mantığı ────────
+
+    /// <summary>
+    /// Önceden oluşturulmuş (Pending) bir PaymentEntity için iyzico checkout
+    /// başlatır. Tutar payment.Amount'tan gelir — bu sayede aynı kod hem
+    /// "Hepsini Öde" (kalan tutar), hem "Seçerek Öde" (seçilen kalemler
+    /// toplamı), hem de "Bölerek Öde" (pay tutarı) için çalışır.
+    /// NOT: Müşteriden ayrı bir fatura/iletişim formu almıyoruz — iyzico'nun
+    /// zorunlu tuttuğu buyer alanları için misafir bilgisi kullanılıyor.
+    /// Gerçek fatura/KVKK ihtiyaçlarına göre prod öncesi gözden geçirilmeli.
+    /// </summary>
+    private async Task<IyzicoCheckoutResponseDto> InitiateIyzicoCheckoutForPaymentAsync(
+        RestaurantTable table, PaymentEntity payment, string buyerIp)
+    {
+        var restaurant = await _restaurantRepository.GetByIdAsync(table.RestaurantId)
+            ?? throw new KeyNotFoundException("Restoran bulunamadı.");
+
+        if (string.IsNullOrEmpty(restaurant.IyzicoSubMerchantKey) || !restaurant.IsIyzicoApproved)
+            throw new InvalidOperationException("Bu restoran henüz online ödeme almaya hazır değil.");
+
+        var priceText = payment.Amount.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
         var callbackBase = _configuration["Iyzico:CallbackBaseUrl"]?.TrimEnd('/') ?? string.Empty;
         var options = IyzicoOptionsFactory.Build(_configuration);
 
@@ -141,51 +387,59 @@ public class PaymentService : IPaymentService
             Price = priceText,
             PaidPrice = priceText,
             Currency = Currency.TRY.ToString(),
-            BasketId = $"order-{order.Id}",
+            BasketId = $"payment-{payment.Id}",
             PaymentGroup = PaymentGroup.PRODUCT.ToString(),
             CallbackUrl = $"{callbackBase}/api/public/payments/iyzico-callback",
             Buyer = new Buyer
             {
                 Id = $"guest-{table.Id}-{DateTime.UtcNow.Ticks}",
-                Name = request.BuyerName,
-                Surname = request.BuyerSurname,
-                GsmNumber = request.BuyerGsmNumber,
-                Email = string.IsNullOrWhiteSpace(request.BuyerEmail) ? "guest@taptable.com" : request.BuyerEmail,
+                Name = "Misafir",
+                Surname = $"Masa{table.TableNumber}",
+                GsmNumber = "+905000000000",
+                Email = "guest@taptable.com",
+                IdentityNumber = "74300864791",
                 RegistrationAddress = restaurant.Address ?? "Adres belirtilmedi",
                 City = "Istanbul",
                 Country = "Turkey",
                 Ip = buyerIp
             },
-            BasketItems = new List<BasketItem>
+            ShippingAddress = new Address                          // ← EKLE
             {
-                new BasketItem
-                {
-                    Id = $"order-{order.Id}-item",
-                    Name = $"Masa {table.TableNumber} Siparişi",
-                    Category1 = "Restoran",
-                    ItemType = BasketItemType.VIRTUAL.ToString(),
-                    Price = priceText,
-                    SubMerchantKey = restaurant.IyzicoSubMerchantKey,
-                    SubMerchantPrice = priceText
-                }
-            }
+                ContactName = "Misafir",
+                City = "Istanbul",
+                Country = "Turkey",
+                Description = restaurant.Address ?? "Adres belirtilmedi",
+                ZipCode = "34000"
+            },
+            BillingAddress = new Address                            // ← EKLE
+            {
+                ContactName = "Misafir",
+                City = "Istanbul",
+                Country = "Turkey",
+                Description = restaurant.Address ?? "Adres belirtilmedi",
+                ZipCode = "34000"
+            },
+            BasketItems = new List<BasketItem>
+    {
+        new BasketItem
+        {
+            Id = $"payment-{payment.Id}-item",
+            Name = $"Masa {table.TableNumber} Ödemesi",
+            Category1 = "Restoran",
+            ItemType = BasketItemType.VIRTUAL.ToString(),
+            Price = priceText,
+            SubMerchantKey = restaurant.IyzicoSubMerchantKey,
+            SubMerchantPrice = priceText
+        }
+    }
         };
 
         var result = await CheckoutFormInitialize.Create(initRequest, options);
         if (result.Status != "success")
             throw new InvalidOperationException($"iyzico ödeme başlatma hatası: {result.ErrorMessage}");
 
-        var payment = new PaymentEntity
-        {
-            OrderId = order.Id,
-            Amount = remaining,
-            Method = PaymentMethod.Iyzico,
-            SplitType = SplitType.Full,
-            Status = PaymentStatus.Pending,
-            IyzicoPaymentId = result.Token,
-            CreatedAt = DateTime.UtcNow
-        };
-        await _paymentRepository.CreateAsync(payment);
+        payment.IyzicoPaymentId = result.Token;
+        await _paymentRepository.UpdateAsync(payment);
 
         return new IyzicoCheckoutResponseDto
         {
@@ -213,25 +467,17 @@ public class PaymentService : IPaymentService
             Token = token
         };
 
-        var result = await CheckoutForm.Retrieve(retrieveRequest, options); 
+        var result = await CheckoutForm.Retrieve(retrieveRequest, options);
 
         if (result.Status == "success" && result.PaymentStatus == "SUCCESS")
         {
-            payment.Status = PaymentStatus.Succeeded;
-            payment.IyzicoPaymentId = result.PaymentId;
-
-            // Onay (escrow release) API'si paymentTransactionId istiyor — paymentId değil.
-            // ⚠️ result.ItemTransactions / .PaymentTransactionId alan adları dokümantasyon
-            // örneklerinden çıkarım — SDK'da farklı isimle geliyorsa burada düzeltilmesi gerekir.
             var transactionId = result.PaymentItems?.FirstOrDefault()?.PaymentTransactionId;
-            payment.IyzicoPaymentTransactionId = transactionId;
 
-            await _paymentRepository.UpdateAsync(payment);
+            var reloaded = await _paymentRepository.GetByIdWithDetailsAsync(payment.Id) ?? payment;
+            reloaded.IyzicoPaymentTransactionId = transactionId;
+            reloaded.IyzicoPaymentId = result.PaymentId;
 
-            var order = await _orderRepository.GetByIdInternalAsync(payment.OrderId);
-            if (order is not null)
-                await SettleOrderIfFullyPaidAsync(order);
-
+            await SettleSucceededPaymentAsync(reloaded);
             return true;
         }
 
@@ -240,7 +486,57 @@ public class PaymentService : IPaymentService
         return false;
     }
 
+    // ── GEÇİCİ — sandbox'ta callback tetiklenmezse elle onay için ────────
+    // Artık normal akışta kullanılmıyor (checkout doğrudan iyzico'ya bağlı).
+    // Sadece test/sandbox arızasında dev tool olarak kalsın diye bırakıldı.
+
+    public async Task<PaymentResponseDto> ConfirmTestPaymentAsync(int paymentId)
+    {
+        var payment = await _paymentRepository.GetByIdWithDetailsAsync(paymentId)
+            ?? throw new KeyNotFoundException($"Ödeme bulunamadı: {paymentId}");
+
+        if (payment.Status == PaymentStatus.Succeeded)
+            return MapToDto(payment);
+
+        await SettleSucceededPaymentAsync(payment);
+        return MapToDto(payment);
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────
+
+    private async Task SettleSucceededPaymentAsync(PaymentEntity payment)
+    {
+        payment.Status = PaymentStatus.Succeeded;
+        await _paymentRepository.UpdateAsync(payment);
+
+        if (payment.SplitPaymentPlanId is int planId)
+        {
+            var plan = await _splitPlanRepository.GetByIdAsync(planId);
+            if (plan is not null)
+            {
+                plan.SharesPaid += payment.SharesCovered;
+                if (plan.SharesPaid >= plan.TotalPeople)
+                    plan.Status = SplitPlanStatus.Completed;
+
+                await _splitPlanRepository.UpdateAsync(plan);
+            }
+        }
+
+        var order = await _orderRepository.GetByIdInternalAsync(payment.OrderId);
+        if (order is null) return;
+
+        if (payment.PaymentItems is { Count: > 0 })
+        {
+            foreach (var paymentItem in payment.PaymentItems)
+            {
+                var orderItem = order.Items.FirstOrDefault(i => i.Id == paymentItem.OrderItemId);
+                if (orderItem is not null)
+                    orderItem.PaidQuantity += paymentItem.Quantity;
+            }
+        }
+
+        await SettleOrderIfFullyPaidAsync(order);
+    }
 
     private async Task SettleOrderIfFullyPaidAsync(Order order)
     {
@@ -254,6 +550,12 @@ public class PaymentService : IPaymentService
         {
             order.Status = OrderStatus.Completed;
 
+            foreach (var item in order.Items)
+            {
+                if (item.PaidQuantity < item.Quantity)
+                    item.PaidQuantity = item.Quantity;
+            }
+
             var table = await _tableRepository.GetByIdAsync(order.TableId, order.Table.RestaurantId);
             if (table is not null)
             {
@@ -263,7 +565,6 @@ public class PaymentService : IPaymentService
 
             await _qrSessionRepository.RotateSessionAsync(order.TableId, order.Table.RestaurantId);
 
-            // Restoranın parasını escrow'dan serbest bırakmak için onay gönder
             await ApproveIyzicoItemsIfNeededAsync(order);
         }
 
@@ -286,10 +587,6 @@ public class PaymentService : IPaymentService
         {
             try
             {
-                // ⚠️ CreateApprovalRequest / Approval.Create — iyzico SDK'sının resmi "Approval"
-                // (ürün/ödeme onayı) sınıf adlarını doğrudan koddan teyit edemedim, isimlendirme
-                // pattern'ine göre çıkarım yaptım. Sandbox'ta ilk denemede hata alırsanız,
-                // doğru sınıf adını öğrenip burayı tek satırda düzeltiriz.
                 var approveRequest = new CreateApprovalRequest
                 {
                     Locale = Locale.TR.ToString(),
@@ -342,4 +639,41 @@ public class PaymentService : IPaymentService
         IyzicoPaymentId = p.IyzicoPaymentId,
         CreatedAt = p.CreatedAt
     };
+
+    private static SplitPaymentPlanResponseDto MapPlanToDto(SplitPaymentPlan p) => new()
+    {
+        Id = p.Id,
+        TotalPeople = p.TotalPeople,
+        TotalAmount = p.TotalAmount,
+        SharesPaid = p.SharesPaid,
+        Status = p.Status.ToString()
+    };
+    private async Task<RestaurantTable> ValidateSessionForReadAsync(int tableId, string sessionKey)
+    {
+        if (string.IsNullOrWhiteSpace(sessionKey))
+            throw new UnauthorizedAccessException("Geçersiz oturum.");
+
+        var session = await _qrSessionRepository.GetByKeyIncludingInactiveAsync(sessionKey)
+            ?? throw new UnauthorizedAccessException("Oturum geçersiz veya süresi dolmuş.");
+
+        if (session.TableId != tableId)
+            throw new UnauthorizedAccessException("Oturum bu masaya ait değil.");
+
+        var table = await _tableRepository.GetByIdAsync(tableId)
+            ?? throw new KeyNotFoundException($"Masa bulunamadı: {tableId}");
+
+        return table;
+    }
+    public async Task<PaymentResponseDto> GetPaymentStatusAsync(int tableId, int paymentId, string sessionKey)
+    {
+        await ValidateSessionForReadAsync(tableId, sessionKey);
+
+        var payment = await _paymentRepository.GetByIdWithDetailsAsync(paymentId)
+            ?? throw new KeyNotFoundException($"Ödeme bulunamadı: {paymentId}");
+
+        if (payment.Order.TableId != tableId)
+            throw new UnauthorizedAccessException("Bu ödemeye erişim yetkiniz yok.");
+
+        return MapToDto(payment);
+    }
 }

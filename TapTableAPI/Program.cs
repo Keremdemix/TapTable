@@ -122,6 +122,7 @@ builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
 builder.Services.AddScoped<IRestaurantRepository, RestaurantRepository>();
 builder.Services.AddScoped<ITableLayoutRepository, TableLayoutRepository>();
+builder.Services.AddScoped<ISplitPaymentPlanRepository, SplitPaymentPlanRepository>();
 
 //
 // ── Services ───────────────────────────────────────────────────────────────────
@@ -160,5 +161,38 @@ app.UseAuthorization();
 app.MapControllers();   // ✅ GERİ AÇILDI — bu olmadan controller'lar route'lanmaz
 
 // app.MapHub<OrderHub>("/hubs/orders"); // OrderHub henüz yazılmadı, yorumda kalsın
+
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<TapTableDbContext>();
+    var customerBaseUrl = builder.Configuration["App:CustomerBaseUrl"]
+        ?? "https://customer.taptable.com";
+
+    var tables = await db.RestaurantTables
+        .Where(t => t.QrToken != null && t.QrToken != "")
+        .ToListAsync();
+
+    var updatedCount = 0;
+    foreach (var t in tables)
+    {
+        var correctUrl = $"{customerBaseUrl}/menu?token={t.QrToken}";
+        if (t.QrCodeUrl != correctUrl)
+        {
+            t.QrCodeUrl = correctUrl;
+            updatedCount++;
+        }
+    }
+
+    if (updatedCount > 0)
+    {
+        await db.SaveChangesAsync();
+        Console.WriteLine($"[FIX] {updatedCount} masanın QrCodeUrl'ü QrToken'a göre güncellendi.");
+    }
+    else
+    {
+        Console.WriteLine("[FIX] Güncellenecek masa yok, hepsi zaten doğru.");
+    }
+}
 
 app.Run();
