@@ -8,6 +8,8 @@ import 'package:tap_table_customer/features/orders/order_provider.dart';
 import '../../core/session/session_provider.dart';
 import 'menu_models.dart';
 import 'menu_provider.dart';
+import '../payment/payment_provider.dart';
+import '../payment/payment_progress_badge.dart';
 
 class MenuScreen extends ConsumerStatefulWidget {
   final CustomerSession session;
@@ -49,6 +51,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
           final cartLines = ref.watch(cartProvider).values.toList();
           final newTotal = ref.watch(cartTotalProvider);
           final activeOrderAsync = ref.watch(activeOrderProvider);
+          final paymentState = ref.watch(paymentStateProvider).value;
 
           final order = activeOrderAsync.when(
             data: (o) => o,
@@ -106,6 +109,8 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     child: Divider(height: 1, color: Colors.grey.shade200),
                   ),
+                  if (paymentState != null)
+                    PaymentProgressBadge(state: paymentState, accent: primary),
                   Row(
                     children: [
                       Expanded(

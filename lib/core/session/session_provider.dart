@@ -9,6 +9,7 @@ class CustomerSession {
   final String? logoUrl;
   final String primaryColorHex;
   final String accentColorHex;
+  final String sessionKey; // ← EKLENDİ
 
   CustomerSession({
     required this.tableId,
@@ -17,6 +18,7 @@ class CustomerSession {
     required this.logoUrl,
     required this.primaryColorHex,
     required this.accentColorHex,
+    required this.sessionKey, // ← EKLENDİ
   });
 
   factory CustomerSession.fromJson(Map<String, dynamic> json) {
@@ -27,24 +29,28 @@ class CustomerSession {
       logoUrl: json['logoUrl'] as String?,
       primaryColorHex: json['primaryColorHex'] as String,
       accentColorHex: json['accentColorHex'] as String,
+      sessionKey: json['sessionKey'] as String, // ← EKLENDİ
     );
   }
 }
 
 final sessionStorageProvider = Provider((ref) => SessionStorage());
-final apiClientProvider = Provider((ref) => ApiClient(ref.read(sessionStorageProvider)));
+final apiClientProvider = Provider(
+  (ref) => ApiClient(ref.read(sessionStorageProvider)),
+);
 
-/// URL'deki ?token= (veya ?t=) değeri — uygulama açılışında EntryScreen tarafından set edilir.
+/// URL'deki ?token= (veya ?t=) değeri — artık masaya sabit bağlı QrToken.
 final qrTokenProvider = StateProvider<String?>((ref) => null);
 
-final customerSessionProvider =
-    FutureProvider.autoDispose<CustomerSession>((ref) async {
+final customerSessionProvider = FutureProvider.autoDispose<CustomerSession>((
+  ref,
+) async {
   final urlToken = ref.watch(qrTokenProvider);
   final storage = ref.read(sessionStorageProvider);
   final apiClient = ref.read(apiClientProvider);
 
-  // URL'de token varsa onu kullan; yoksa daha önce saklanmış token'a düş
-  // (sayfa yenilenirse token URL'de kalmayabilir).
+  // QR'daki token sabit olduğu için URL'de her zaman mevcut olmalı.
+  // Yine de daha önce saklanmış SessionKey'e düşme ihtimali için bırakıldı.
   final token = urlToken ?? await storage.getToken();
 
   if (token == null) {
@@ -52,7 +58,12 @@ final customerSessionProvider =
   }
 
   final json = await apiClient.resolveSession(token);
-  await storage.saveToken(token);
+  final session = CustomerSession.fromJson(json);
 
-  return CustomerSession.fromJson(json);
+  // KRİTİK: URL'deki sabit QrToken değil, backend'in döndürdüğü GERÇEK
+  // (ve rotate olabilen) SessionKey saklanır. Bundan sonraki tüm API
+  // çağrıları (X-QR-Token header'ı) bu değeri kullanır.
+  await storage.saveToken(session.sessionKey);
+
+  return session;
 });
