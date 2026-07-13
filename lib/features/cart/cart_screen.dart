@@ -2,6 +2,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tap_table_customer/features/cart/cart_models.dart';
+import 'package:tap_table_customer/features/payment/payment_models.dart';
+import 'package:tap_table_customer/features/payment/payment_progress_badge.dart';
 import '../../core/session/session_provider.dart';
 import '../orders/order_models.dart';
 import '../orders/order_provider.dart';
@@ -9,7 +11,6 @@ import 'cart_provider.dart';
 import '../payment/payment_provider.dart';
 import '../payment/select_items_screen.dart';
 import '../payment/split_payment_screen.dart';
-import '../payment/buyer_info_sheet.dart';
 import '../payment/checkout_pending_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -825,9 +826,6 @@ class _PaymentOptionsRow extends ConsumerWidget {
     final session = ref.read(customerSessionProvider).value;
     if (session == null) return;
 
-    final buyer = await showBuyerInfoSheet(context, accent);
-    if (buyer == null) return;
-
     try {
       final apiClient = ref.read(apiClientProvider);
       final sessionKey = await ref.read(sessionStorageProvider).getToken();
@@ -835,22 +833,23 @@ class _PaymentOptionsRow extends ConsumerWidget {
       final json = await apiClient.createIyzicoCheckout(
         session.tableId,
         sessionKey: sessionKey!,
-        buyerName: buyer.name,
-        buyerSurname: buyer.surname,
-        buyerGsmNumber: buyer.gsmNumber,
-        buyerEmail: buyer.email,
       );
 
-      final url = json['paymentPageUrl'] as String;
-
-      await launchUrl(Uri.parse(url), webOnlyWindowName: '_blank');
+      final checkout = IyzicoCheckoutResult.fromJson(json);
+      await launchUrl(
+        Uri.parse(checkout.paymentPageUrl),
+        webOnlyWindowName: '_blank',
+      );
 
       if (context.mounted) {
-        Navigator.push(
+        await Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) =>
-                CheckoutPendingScreen(primary: primary, accent: accent),
+            builder: (_) => CheckoutPendingScreen(
+              primary: primary,
+              accent: accent,
+              paymentId: checkout.paymentId,
+            ),
           ),
         );
       }
@@ -866,54 +865,63 @@ class _PaymentOptionsRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final stateAsync = ref.watch(paymentStateProvider);
-    final hasActivePlan = stateAsync.value?.hasActiveSplitPlan ?? false;
+    final state = stateAsync.value;
+    final hasActivePlan = state?.hasActiveSplitPlan ?? false;
 
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(
-          child: _PaymentButton(
-            icon: Icons.checklist_rtl,
-            label: 'Seçerek Öde',
-            color: primary,
-            filled: false,
-            onTap: hasActivePlan
-                ? null
-                : () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          SelectItemsScreen(primary: primary, accent: accent),
-                    ),
-                  ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _PaymentButton(
-            icon: Icons.call_split,
-            label: 'Bölerek Öde',
-            color: primary,
-            filled: false,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) =>
-                    SplitPaymentScreen(primary: primary, accent: accent),
+        if (state != null) PaymentProgressBadge(state: state, accent: accent),
+        Row(
+          children: [
+            Expanded(
+              child: _PaymentButton(
+                icon: Icons.checklist_rtl,
+                label: 'Seçerek Öde',
+                color: primary,
+                filled: false,
+                onTap: hasActivePlan
+                    ? null
+                    : () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => SelectItemsScreen(
+                            primary: primary,
+                            accent: accent,
+                          ),
+                        ),
+                      ),
               ),
             ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _PaymentButton(
-            icon: Icons.payments,
-            label: 'Hepsini Öde',
-            color: accent,
-            filled: true,
-            onTap: hasActivePlan
-                ? null
-                : () => _startFullCheckout(context, ref),
-          ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _PaymentButton(
+                icon: Icons.call_split,
+                label: 'Bölerek Öde',
+                color: primary,
+                filled: false,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        SplitPaymentScreen(primary: primary, accent: accent),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _PaymentButton(
+                icon: Icons.payments,
+                label: 'Hepsini Öde',
+                color: accent,
+                filled: true,
+                onTap: hasActivePlan
+                    ? null
+                    : () => _startFullCheckout(context, ref),
+              ),
+            ),
+          ],
         ),
       ],
     );

@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/session/session_provider.dart';
 import 'payment_models.dart';
 import 'payment_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'payment_models.dart';
+import 'checkout_pending_screen.dart';
 
 class SelectItemsScreen extends ConsumerStatefulWidget {
   final Color primary;
@@ -44,19 +47,31 @@ class _SelectItemsScreenState extends ConsumerState<SelectItemsScreen> {
       final apiClient = ref.read(apiClientProvider);
       final sessionKey = await ref.read(sessionStorageProvider).getToken();
 
-      await apiClient.paySelectedItems(
+      final json = await apiClient.paySelectedItems(
         tableId,
         sessionKey: sessionKey!,
         items: lines,
       );
 
-      ref.invalidate(paymentStateProvider);
+      final checkout = IyzicoCheckoutResult.fromJson(json);
+      await launchUrl(
+        Uri.parse(checkout.paymentPageUrl),
+        webOnlyWindowName: '_blank',
+      );
+
+      setState(() => _selected.clear()); // ekrana dönünce güncel liste görünsün
 
       if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Ödeme talebiniz alındı, garson onayı bekleniyor.'),
+        // DİKKAT: bu ekranı kapatmıyoruz — CheckoutPendingScreen üstüne
+        // açılıyor, "Ödeme Ekranına Dön" bu ekrana geri dönebilsin diye.
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => CheckoutPendingScreen(
+              primary: widget.primary,
+              accent: widget.accent,
+              paymentId: checkout.paymentId,
+            ),
           ),
         );
       }

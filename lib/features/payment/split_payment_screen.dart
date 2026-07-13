@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tap_table_customer/features/payment/checkout_pending_screen.dart';
+import 'package:tap_table_customer/features/payment/payment_models.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/session/session_provider.dart';
 import 'payment_provider.dart';
 
@@ -67,18 +70,29 @@ class _SplitPaymentScreenState extends ConsumerState<SplitPaymentScreen> {
     try {
       final apiClient = ref.read(apiClientProvider);
       final sessionKey = await ref.read(sessionStorageProvider).getToken();
-      await apiClient.paySplitShare(
+
+      final json = await apiClient.paySplitShare(
         tableId,
         planId,
         sessionKey: sessionKey!,
         shares: _sharesToPay,
       );
-      ref.invalidate(paymentStateProvider);
+
+      final checkout = IyzicoCheckoutResult.fromJson(json);
+      await launchUrl(
+        Uri.parse(checkout.paymentPageUrl),
+        webOnlyWindowName: '_blank',
+      );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Payınız alındı, garson onayı bekleniyor.'),
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => CheckoutPendingScreen(
+              primary: widget.primary,
+              accent: widget.accent,
+              paymentId: checkout.paymentId,
+            ),
           ),
         );
       }

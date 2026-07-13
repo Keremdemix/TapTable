@@ -130,20 +130,21 @@ class ApiClient {
   Future<Map<String, dynamic>> createIyzicoCheckout(
     int tableId, {
     required String sessionKey,
-    required String buyerName,
-    required String buyerSurname,
-    required String buyerGsmNumber,
-    String? buyerEmail,
   }) {
     return post(
       '/public/payments/$tableId/iyzico-checkout',
-      data: {
-        'sessionKey': sessionKey,
-        'buyerName': buyerName,
-        'buyerSurname': buyerSurname,
-        'buyerGsmNumber': buyerGsmNumber,
-        'buyerEmail': buyerEmail,
-      },
+      data: {'sessionKey': sessionKey},
+    );
+  }
+
+  Future<Map<String, dynamic>> getPaymentStatus(
+    int tableId,
+    int paymentId,
+    String sessionKey,
+  ) {
+    return get(
+      '/public/payments/$tableId/payment-status/$paymentId',
+      query: {'sessionKey': sessionKey},
     );
   }
 }
