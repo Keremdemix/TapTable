@@ -41,16 +41,16 @@ class _KitchenHomeScreenState extends ConsumerState<KitchenHomeScreen> {
 
     setState(() => _updatingItemIds.add(item.id));
     try {
-      await ref.read(orderRepositoryProvider).updateItemStatus(
-            orderId: orderId,
-            itemId: item.id,
-            status: next,
-          );
+      await ref
+          .read(orderRepositoryProvider)
+          .updateItemStatus(orderId: orderId, itemId: item.id, status: next);
       ref.invalidate(kitchenOrdersProvider);
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Durum güncellenemedi, tekrar deneyin.')),
+          const SnackBar(
+            content: Text('Durum güncellenemedi, tekrar deneyin.'),
+          ),
         );
       }
     } finally {
@@ -70,7 +70,8 @@ class _KitchenHomeScreenState extends ConsumerState<KitchenHomeScreen> {
             icon: const Icon(Icons.logout),
             onPressed: () async {
               await ref.read(authRepositoryProvider).logout();
-              if (context.mounted) Navigator.pushReplacementNamed(context, '/login');
+              if (context.mounted)
+                Navigator.pushReplacementNamed(context, '/login');
             },
           ),
         ],
@@ -127,23 +128,38 @@ class _OrderCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Text('Masa ${order.tableNumber}',
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                Text(
+                  'Masa ${order.tableNumber}',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 const Spacer(),
-                Text('#${order.id}', style: TextStyle(color: Colors.grey.shade600)),
+                Text(
+                  '#${order.id}',
+                  style: TextStyle(color: Colors.grey.shade600),
+                ),
               ],
             ),
             if (order.note != null && order.note!.isNotEmpty) ...[
               const SizedBox(height: 4),
-              Text('Not: ${order.note}',
-                  style: const TextStyle(fontStyle: FontStyle.italic, color: Colors.red)),
+              Text(
+                'Not: ${order.note}',
+                style: const TextStyle(
+                  fontStyle: FontStyle.italic,
+                  color: Colors.red,
+                ),
+              ),
             ],
             const Divider(),
-            ...order.items.map((item) => _ItemRow(
-                  item: item,
-                  isUpdating: updatingItemIds.contains(item.id),
-                  onAdvance: () => onAdvance(order.id, item),
-                )),
+            ...order.items.map(
+              (item) => _ItemRow(
+                item: item,
+                isUpdating: updatingItemIds.contains(item.id),
+                onAdvance: () => onAdvance(order.id, item),
+              ),
+            ),
           ],
         ),
       ),
@@ -156,48 +172,97 @@ class _ItemRow extends StatelessWidget {
   final bool isUpdating;
   final VoidCallback onAdvance;
 
-  const _ItemRow({required this.item, required this.isUpdating, required this.onAdvance});
+  const _ItemRow({
+    required this.item,
+    required this.isUpdating,
+    required this.onAdvance,
+  });
 
   (String, Color) _statusLabel(OrderItemStatus status) => switch (status) {
-        OrderItemStatus.pending => ('Bekliyor', Colors.grey),
-        OrderItemStatus.preparing => ('Hazırlanıyor', Colors.orange),
-        OrderItemStatus.ready => ('Hazır', Colors.blue),
-        OrderItemStatus.served => ('Servis Edildi', Colors.green),
-        OrderItemStatus.cancelled => ('İptal', Colors.red),
-      };
+    OrderItemStatus.pending => ('Bekliyor', Colors.grey),
+    OrderItemStatus.preparing => ('Hazırlanıyor', Colors.orange),
+    OrderItemStatus.ready => ('Hazır', Colors.blue),
+    OrderItemStatus.served => ('Servis Edildi', Colors.green),
+    OrderItemStatus.cancelled => ('İptal', Colors.red),
+  };
 
   String? _nextActionLabel(OrderItemStatus status) => switch (status) {
-        OrderItemStatus.pending => 'Hazırlanmaya Başla',
-        OrderItemStatus.preparing => 'Hazır',
-        OrderItemStatus.ready => 'Servis Edildi',
-        _ => null,
-      };
+    OrderItemStatus.pending => 'Hazırlanmaya Başla',
+    OrderItemStatus.preparing => 'Hazır',
+    OrderItemStatus.ready => 'Servis Edildi',
+    _ => null,
+  };
 
   @override
   Widget build(BuildContext context) {
     final (label, color) = _statusLabel(item.status);
     final actionLabel = _nextActionLabel(item.status);
+    final hasNote = item.note != null && item.note!.isNotEmpty;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      padding: EdgeInsets.all(hasNote ? 8 : 0),
+      decoration: hasNote
+          ? BoxDecoration(
+              color: Colors.red.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.red.shade200, width: 1),
+            )
+          : null,
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('${item.quantity}x ${item.menuItemName}',
-                    style: const TextStyle(fontWeight: FontWeight.w600)),
-                if (item.note != null && item.note!.isNotEmpty)
-                  Text(item.note!, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                Text(
+                  '${item.quantity}x ${item.menuItemName}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                  ),
+                ),
+
+                if (hasNote) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.priority_high_rounded,
+                        size: 16,
+                        color: Colors.red.shade700,
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          item.note!,
+                          style: TextStyle(
+                            color: Colors.red.shade800,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+
                 Container(
-                  margin: const EdgeInsets.only(top: 4),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  margin: const EdgeInsets.only(top: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: color.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Text(label, style: TextStyle(color: color, fontSize: 12)),
+                  child: Text(
+                    label,
+                    style: TextStyle(color: color, fontSize: 12),
+                  ),
                 ),
               ],
             ),
@@ -207,8 +272,13 @@ class _ItemRow extends StatelessWidget {
               onPressed: isUpdating ? null : onAdvance,
               child: isUpdating
                   ? const SizedBox(
-                      width: 16, height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
                   : Text(actionLabel),
             ),
         ],
