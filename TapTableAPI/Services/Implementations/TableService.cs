@@ -55,7 +55,7 @@ public class TableService : ITableService
 
         var created = await _tableRepository.CreateAsync(table);
 
-        // Session önce oluşturulur, QR URL token'a göre üretilir — table id URL'de yer almaz
+        // Session ödeme sonrası rotate olacak — QR URL'i etkilemez
         var session = new QrSession
         {
             TableId = created.Id,
@@ -66,7 +66,8 @@ public class TableService : ITableService
         };
         await _qrSessionRepository.CreateAsync(session);
 
-        created.QrCodeUrl = $"{_customerBaseUrl}/menu?token={session.SessionKey}";
+        // QR URL artık kalıcı QrToken'a göre üretiliyor, SessionKey'e göre değil
+        created.QrCodeUrl = $"{_customerBaseUrl}/menu?token={created.QrToken}";
         await _tableRepository.UpdateAsync(created);
 
         // Kat planı kısmı aynı kalıyor...
@@ -87,7 +88,6 @@ public class TableService : ITableService
 
         return MapToDto(created);
     }
-
     public async Task<TableResponseDto> UpdateTableAsync(int tableId, int restaurantId, UpdateTableRequestDto request)
     {
         var table = await _tableRepository.GetByIdAsync(tableId, restaurantId)
@@ -147,15 +147,14 @@ public class TableService : ITableService
             CreatedAt = DateTime.UtcNow
         });
 
-        // Eski token'ı taşıyan URL artık geçersiz — table.QrCodeUrl yeni token ile güncellenir
-        table.QrCodeUrl = $"{_customerBaseUrl}/menu?token={newKey}";
-        var updated = await _tableRepository.UpdateAsync(table);
+        // QrCodeUrl SABİT — table.QrToken hiç değişmiyor, fiziksel QR geçerliliğini koruyor.
+        // Burada sadece backend'in kabul ettiği SessionKey rotate ediliyor.
 
         return new RegenerateQrResponseDto
         {
-            TableId = updated.Id,
-            TableNumber = updated.TableNumber,
-            QrCodeUrl = updated.QrCodeUrl,
+            TableId = table.Id,
+            TableNumber = table.TableNumber,
+            QrCodeUrl = table.QrCodeUrl,
             NewSessionKey = newKey
         };
     }

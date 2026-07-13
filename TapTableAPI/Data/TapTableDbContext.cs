@@ -20,6 +20,8 @@ public class TapTableDbContext : DbContext
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<QrSession> QrSessions => Set<QrSession>();
+    public DbSet<SplitPaymentPlan> SplitPaymentPlans => Set<SplitPaymentPlan>();   // ← EKLENDİ
+    public DbSet<PaymentItem> PaymentItems => Set<PaymentItem>();                 // ← EKLENDİ
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -74,7 +76,8 @@ public class TapTableDbContext : DbContext
             e.HasKey(x => x.Id);
             e.Property(x => x.Capacity).HasDefaultValue(4);
             e.Property(x => x.QrCodeUrl).HasMaxLength(500);
-
+            e.Property(x => x.QrToken).HasMaxLength(64).IsRequired();
+            e.HasIndex(x => x.QrToken).IsUnique();
             e.Property(x => x.Status)
              .HasConversion<string>()
              .HasMaxLength(50)
@@ -183,6 +186,7 @@ public class TapTableDbContext : DbContext
             e.Property(x => x.Quantity).IsRequired();
             e.Property(x => x.UnitPrice).HasColumnType("decimal(18,2)");
             e.Property(x => x.Note).HasMaxLength(300);
+            e.Property(x => x.PaidQuantity).HasDefaultValue(0);   // ← EKLENDİ
 
             e.Property(x => x.Status)
              .HasConversion<string>()
@@ -207,13 +211,62 @@ public class TapTableDbContext : DbContext
             e.Property(x => x.Amount).HasColumnType("decimal(18,2)");
             e.Property(x => x.Method).HasConversion<string>().HasMaxLength(30);
             e.Property(x => x.SplitType).HasConversion<string>().HasMaxLength(20).HasDefaultValue(SplitType.Full);
-            e.Property(x => x.IyzicoPaymentId).HasMaxLength(200);   // ← EKLENDİ
+            e.Property(x => x.IyzicoPaymentId).HasMaxLength(200);
+            e.Property(x => x.IyzicoPaymentTransactionId).HasMaxLength(200);   // ← EKLENDİ (kolon boyu belirtilmemişti)
             e.Property(x => x.Status).HasConversion<string>().HasMaxLength(50).HasDefaultValue(PaymentStatus.Pending);
             e.Property(x => x.CreatedAt).HasDefaultValueSql("GETDATE()");
+            e.Property(x => x.SharesCovered).HasDefaultValue(1);   // ← EKLENDİ
 
             e.HasOne(x => x.Order)
              .WithMany(o => o.Payments)
              .HasForeignKey(x => x.OrderId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            // ← EKLENDİ: Bölerek Öde ("Equal") ödemelerinin bağlı olduğu plan.
+            // Order → Payments zaten Restrict; SplitPaymentPlan → Payments da
+            // Restrict olmazsa SQL Server "multiple cascade paths" hatası verir.
+            e.HasOne(x => x.SplitPaymentPlan)
+             .WithMany(sp => sp.Payments)
+             .HasForeignKey(x => x.SplitPaymentPlanId)
+             .IsRequired(false)
+             .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── SplitPaymentPlan ──────────────────────────────────────────────────  ← EKLENDİ
+        modelBuilder.Entity<SplitPaymentPlan>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.TotalAmount).HasColumnType("decimal(18,2)");
+            e.Property(x => x.SharesPaid).HasDefaultValue(0);
+            e.Property(x => x.CreatedAt).HasDefaultValueSql("GETDATE()");
+
+            e.Property(x => x.Status)
+             .HasConversion<string>()
+             .HasMaxLength(20)
+             .HasDefaultValue(SplitPlanStatus.Active);
+
+            e.HasOne(x => x.Order)
+             .WithMany(o => o.SplitPaymentPlans)
+             .HasForeignKey(x => x.OrderId)
+             .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── PaymentItem ───────────────────────────────────────────────────────  ← EKLENDİ
+        modelBuilder.Entity<PaymentItem>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Quantity).IsRequired();
+
+            e.HasOne(x => x.Payment)
+             .WithMany(p => p.PaymentItems)
+             .HasForeignKey(x => x.PaymentId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            // OrderItem → Cascade olsaydı, OrderItem.Order → Cascade ile birlikte
+            // aynı çoklu-cascade sorununu yaratırdı; Restrict tutuyoruz.
+            e.HasOne(x => x.OrderItem)
+             .WithMany(oi => oi.PaymentItems)
+             .HasForeignKey(x => x.OrderItemId)
              .OnDelete(DeleteBehavior.Restrict);
         });
     }

@@ -53,4 +53,11 @@ public class PaymentRepository : IPaymentRepository
     {
         return await _context.Payments.FirstOrDefaultAsync(p => p.IyzicoPaymentId == token);
     }
+    public async Task<Payment?> GetByIdWithDetailsAsync(int paymentId)
+    {
+        return await _context.Payments
+            .Include(p => p.PaymentItems)
+            .Include(p => p.Order)
+            .FirstOrDefaultAsync(p => p.Id == paymentId);
+    }
 }

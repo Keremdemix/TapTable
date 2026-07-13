@@ -9,4 +9,5 @@ public class CustomerSessionResponseDto
     public string? LogoUrl { get; set; }
     public string PrimaryColorHex { get; set; } = null!;
     public string AccentColorHex { get; set; } = null!;
+    public string SessionKey { get; set; } = null!;
 }

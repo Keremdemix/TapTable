@@ -10,4 +10,5 @@ public interface IOrderRepository
     Task<Order> UpdateAsync(Order order);
     Task<OrderItem?> GetItemAsync(int orderId, int itemId, int restaurantId);
     Task UpdateItemStatusAsync(OrderItem item);
+    Task<Order?> GetLatestByTableAsync(int tableId);
 }

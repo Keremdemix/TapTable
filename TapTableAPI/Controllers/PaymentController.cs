@@ -38,4 +38,11 @@ public class PaymentController : ControllerBase
         var payments = await _paymentService.GetPaymentsForOrderAsync(orderId, RestaurantId);
         return Ok(payments);
     }
+
+    [HttpPost("test-confirm/{paymentId:int}")]
+    public async Task<IActionResult> ConfirmTestPayment(int paymentId)
+    {
+        var payment = await _paymentService.ConfirmTestPaymentAsync(paymentId);
+        return Ok(payment);
+    }
 }

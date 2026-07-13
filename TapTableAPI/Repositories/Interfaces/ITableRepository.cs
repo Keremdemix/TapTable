@@ -10,4 +10,5 @@ public interface ITableRepository
     Task<RestaurantTable> CreateAsync(RestaurantTable table);
     Task<RestaurantTable> UpdateAsync(RestaurantTable table);
     Task DeleteAsync(RestaurantTable table);
+    Task<RestaurantTable?> GetByQrTokenAsync(string qrToken);
 }
