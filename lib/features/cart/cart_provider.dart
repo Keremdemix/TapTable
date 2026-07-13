@@ -22,14 +22,31 @@ class CartNotifier extends StateNotifier<Map<int, CartLine>> {
       final next = {...state}..remove(itemId);
       state = next;
     } else {
-      state = {...state, itemId: existing.copyWith(quantity: existing.quantity - 1)};
+      state = {
+        ...state,
+        itemId: existing.copyWith(quantity: existing.quantity - 1),
+      };
     }
   }
- 
+
   void remove(int itemId) {
-  final next = {...state}..remove(itemId);
-  state = next;
-}
+    final next = {...state}..remove(itemId);
+    state = next;
+  }
+
+  /// Bir sepet satırına not ekler/günceller. Boş string gelirse notu temizler.
+  void updateNote(int itemId, String? note) {
+    final existing = state[itemId];
+    if (existing == null) return;
+
+    final trimmed = note?.trim();
+    state = {
+      ...state,
+      itemId: (trimmed == null || trimmed.isEmpty)
+          ? existing.clearNote()
+          : existing.copyWith(note: trimmed),
+    };
+  }
 
   void clear() => state = {};
 

@@ -39,6 +39,8 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                   (line) => {
                     'menuItemId': line.item.id,
                     'quantity': line.quantity,
+                    'note': line
+                        .note, // null olabilir, backend nullable kabul etmeli
                   },
                 )
                 .toList(),
@@ -379,7 +381,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Daha önce verdiğiniz siparişler yukarıda, yeni ekledikleriniz aşağıda gösterilir.',
+                  'Yeni eklediğiniz ürünler yukarıda, daha önce verdiğiniz siparişler aşağıda gösterilir.',
                   style: TextStyle(
                     fontSize: 13,
                     color: Colors.grey.shade800,
@@ -393,67 +395,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
         const SizedBox(height: 20),
 
-        if (order != null) ...[
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: primary,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.check, size: 14, color: Colors.white),
-              ),
-              const SizedBox(width: 8),
-              const Text(
-                'Daha Önce Sipariş Verdiğiniz Ürünler',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 10),
-
-          ...order.items.map(
-            (item) => _PreviousOrderTile(
-              item: item,
-              createdAt: order.createdAt,
-              primary: primary,
-              accent: accent,
-            ),
-          ),
-
-          const SizedBox(height: 8),
-
-          // Önceki sipariş için ara toplam - genel toplamla karışmasın diye burada gösteriliyor
-          Align(
-            alignment: Alignment.centerRight,
-            child: Text(
-              'Bu siparişin tutarı: ₺${order.items.fold<double>(0, (s, i) => s + i.lineTotal).toStringAsFixed(2)}',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey.shade600,
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 20),
-
-          Row(
-            children: [
-              Expanded(child: Divider(color: Colors.grey.shade300)),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Icon(Icons.add_circle, size: 16, color: accent),
-              ),
-              Expanded(child: Divider(color: Colors.grey.shade300)),
-            ],
-          ),
-
-          const SizedBox(height: 16),
-        ],
-
+        // --- ÖNCE: YENİ EKLENEN ÜRÜNLER ---
         if (cartLines.isNotEmpty) ...[
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -502,11 +444,72 @@ class _CartScreenState extends ConsumerState<CartScreen> {
             (line) =>
                 _NewCartTile(line: line, primary: primary, accent: accent),
           ),
-        ] else if (order != null)
+
+          if (order != null) ...[
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(child: Divider(color: Colors.grey.shade300)),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Icon(Icons.history, size: 16, color: primary),
+                ),
+                Expanded(child: Divider(color: Colors.grey.shade300)),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
+        ],
+
+        // --- SONRA: DAHA ÖNCE VERİLEN SİPARİŞ ---
+        if (order != null) ...[
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: primary,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.check, size: 14, color: Colors.white),
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Daha Önce Sipariş Verdiğiniz Ürünler',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 10),
+
+          ...order.items.map(
+            (item) => _PreviousOrderTile(
+              item: item,
+              createdAt: order.createdAt,
+              primary: primary,
+              accent: accent,
+            ),
+          ),
+
+          const SizedBox(height: 8),
+
+          Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              'Bu siparişin tutarı: ₺${order.items.fold<double>(0, (s, i) => s + i.lineTotal).toStringAsFixed(2)}',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade600,
+              ),
+            ),
+          ),
+        ] else if (cartLines.isNotEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Text(
-              'Henüz yeni ürün eklemediniz.',
+              'Henüz onaylanmış bir siparişiniz yok.',
               style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
             ),
           ),
@@ -533,9 +536,9 @@ class _PreviousOrderTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final time = TimeOfDay.fromDateTime(createdAt.toLocal());
-
     final timeStr =
         '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+    final hasNote = item.note != null && item.note!.isNotEmpty;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -544,69 +547,108 @@ class _PreviousOrderTile extends StatelessWidget {
         color: Colors.grey.shade100,
         borderRadius: BorderRadius.circular(14),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child:
-                item.menuItemImageUrl != null &&
-                    item.menuItemImageUrl!.isNotEmpty
-                ? CachedNetworkImage(
-                    imageUrl: item.menuItemImageUrl!,
-                    width: 64,
-                    height: 64,
-                    fit: BoxFit.cover,
-                  )
-                : Container(
-                    width: 64,
-                    height: 64,
-                    color: Colors.grey.shade300,
-                    child: const Icon(Icons.fastfood, color: Colors.white),
-                  ),
-          ),
-
-          const SizedBox(width: 12),
-
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.menuItemName,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${item.quantity} Adet',
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '₺${item.lineTotal.toStringAsFixed(2)}',
-                  style: TextStyle(color: primary, fontWeight: FontWeight.w700),
-                ),
-              ],
-            ),
-          ),
-
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          Row(
             children: [
-              _StatusChip(
-                status: item.status,
-                primary: primary,
-                accent: accent,
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child:
+                    item.menuItemImageUrl != null &&
+                        item.menuItemImageUrl!.isNotEmpty
+                    ? CachedNetworkImage(
+                        imageUrl: item.menuItemImageUrl!,
+                        width: 64,
+                        height: 64,
+                        fit: BoxFit.cover,
+                      )
+                    : Container(
+                        width: 64,
+                        height: 64,
+                        color: Colors.grey.shade300,
+                        child: const Icon(Icons.fastfood, color: Colors.white),
+                      ),
               ),
-              const SizedBox(height: 10),
-              Text(
-                timeStr,
-                style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.menuItemName,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${item.quantity} Adet',
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '₺${item.lineTotal.toStringAsFixed(2)}',
+                      style: TextStyle(
+                        color: primary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  _StatusChip(
+                    status: item.status,
+                    primary: primary,
+                    accent: accent,
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    timeStr,
+                    style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                  ),
+                ],
               ),
             ],
           ),
+          if (hasNote) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.amber.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.sticky_note_2,
+                    size: 15,
+                    color: Colors.amber.shade800,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      item.note!,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.amber.shade900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -692,8 +734,106 @@ class _NewCartTile extends ConsumerWidget {
     required this.accent,
   });
 
+  Future<void> _editNote(BuildContext context, WidgetRef ref) async {
+    final controller = TextEditingController(text: line.note ?? '');
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+        contentPadding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+        actionsPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: accent.withOpacity(.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                Icons.sticky_note_2_outlined,
+                size: 18,
+                color: accent,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                '${line.item.name} için not',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 140,
+          maxLines: 3,
+          cursorColor: accent,
+          decoration: InputDecoration(
+            hintText: 'Örn: Acısız olsun, soğansız olsun...',
+            hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+            filled: true,
+            fillColor: Colors.grey.shade50,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.grey.shade300),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.grey.shade300),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: accent, width: 1.6),
+            ),
+            counterStyle: TextStyle(color: Colors.grey.shade400, fontSize: 11),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: TextButton.styleFrom(foregroundColor: Colors.grey.shade600),
+            child: const Text(
+              'Vazgeç',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            style: FilledButton.styleFrom(
+              backgroundColor: accent,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+            ),
+            child: const Text(
+              'Kaydet',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null) {
+      ref.read(cartProvider.notifier).updateNote(line.item.id, result);
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final hasNote = line.note != null && line.note!.isNotEmpty;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(10),
@@ -702,101 +842,150 @@ class _NewCartTile extends ConsumerWidget {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: accent.withOpacity(.30)),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: line.item.imageUrl != null && line.item.imageUrl!.isNotEmpty
-                ? CachedNetworkImage(
-                    imageUrl: line.item.imageUrl!,
-                    width: 64,
-                    height: 64,
-                    fit: BoxFit.cover,
-                  )
-                : Container(
-                    width: 64,
-                    height: 64,
-                    color: Colors.grey.shade100,
-                    child: const Icon(Icons.fastfood, color: Colors.grey),
-                  ),
-          ),
-
-          const SizedBox(width: 12),
-
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  line.item.name,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
-                  ),
-                ),
-
-                const SizedBox(height: 4),
-
-                Text(
-                  '${line.quantity} Adet',
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-                ),
-
-                const SizedBox(height: 2),
-
-                Text(
-                  '₺${line.total.toStringAsFixed(2)}',
-                  style: TextStyle(color: accent, fontWeight: FontWeight.w700),
-                ),
-              ],
-            ),
-          ),
-
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          Row(
             children: [
-              Container(
-                decoration: BoxDecoration(
-                  color: accent.withOpacity(.10),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: Icon(Icons.remove, size: 16, color: accent),
-                      onPressed: () => ref
-                          .read(cartProvider.notifier)
-                          .decrement(line.item.id),
-                    ),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child:
+                    line.item.imageUrl != null && line.item.imageUrl!.isNotEmpty
+                    ? CachedNetworkImage(
+                        imageUrl: line.item.imageUrl!,
+                        width: 64,
+                        height: 64,
+                        fit: BoxFit.cover,
+                      )
+                    : Container(
+                        width: 64,
+                        height: 64,
+                        color: Colors.grey.shade100,
+                        child: const Icon(Icons.fastfood, color: Colors.grey),
+                      ),
+              ),
 
+              const SizedBox(width: 12),
+
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Text(
-                      '${line.quantity}',
+                      line.item.name,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${line.quantity} Adet',
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '₺${line.total.toStringAsFixed(2)}',
                       style: TextStyle(
                         color: accent,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-
-                    IconButton(
-                      icon: Icon(Icons.add, size: 16, color: accent),
-                      onPressed: () =>
-                          ref.read(cartProvider.notifier).add(line.item),
-                    ),
                   ],
                 ),
               ),
 
-              const SizedBox(height: 8),
-
-              IconButton(
-                icon: Icon(Icons.delete_outline, size: 20, color: accent),
-                onPressed: () =>
-                    ref.read(cartProvider.notifier).remove(line.item.id),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      color: accent.withOpacity(.10),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.remove, size: 16, color: accent),
+                          onPressed: () => ref
+                              .read(cartProvider.notifier)
+                              .decrement(line.item.id),
+                        ),
+                        Text(
+                          '${line.quantity}',
+                          style: TextStyle(
+                            color: accent,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.add, size: 16, color: accent),
+                          onPressed: () =>
+                              ref.read(cartProvider.notifier).add(line.item),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  IconButton(
+                    icon: Icon(Icons.delete_outline, size: 20, color: accent),
+                    onPressed: () =>
+                        ref.read(cartProvider.notifier).remove(line.item.id),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
               ),
             ],
+          ),
+
+          const SizedBox(height: 8),
+
+          // --- NOT ALANI ---
+          InkWell(
+            onTap: () => _editNote(context, ref),
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              decoration: BoxDecoration(
+                color: hasNote ? Colors.amber.shade50 : Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: hasNote ? Colors.amber.shade200 : Colors.grey.shade200,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    hasNote ? Icons.sticky_note_2 : Icons.note_add_outlined,
+                    size: 15,
+                    color: hasNote
+                        ? Colors.amber.shade800
+                        : Colors.grey.shade500,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      hasNote ? line.note! : 'Not ekle',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: hasNote ? FontWeight.w600 : FontWeight.w500,
+                        color: hasNote
+                            ? Colors.amber.shade900
+                            : Colors.grey.shade500,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Icon(Icons.edit, size: 13, color: Colors.grey.shade400),
+                ],
+              ),
+            ),
           ),
         ],
       ),
@@ -872,14 +1061,54 @@ class _PaymentOptionsRow extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (state != null) PaymentProgressBadge(state: state, accent: accent),
+
+        // Hepsini Öde — ana CTA, tam genişlik, dolgun
+        SizedBox(
+          height: 56,
+          child: FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: hasActivePlan ? Colors.grey.shade300 : accent,
+              elevation: hasActivePlan ? 0 : 2,
+              shadowColor: accent.withOpacity(.4),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+            onPressed: hasActivePlan
+                ? null
+                : () => _startFullCheckout(context, ref),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.payments,
+                  size: 20,
+                  color: hasActivePlan ? Colors.grey.shade500 : Colors.white,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Hepsini Öde',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                    color: hasActivePlan ? Colors.grey.shade500 : Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 10),
+
+        // Alt satır — ikincil seçenekler, hafif kart görünümü
         Row(
           children: [
             Expanded(
-              child: _PaymentButton(
+              child: _PaymentOptionCard(
                 icon: Icons.checklist_rtl,
                 label: 'Seçerek Öde',
                 color: primary,
-                filled: false,
                 onTap: hasActivePlan
                     ? null
                     : () => Navigator.push(
@@ -893,13 +1122,12 @@ class _PaymentOptionsRow extends ConsumerWidget {
                       ),
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
             Expanded(
-              child: _PaymentButton(
+              child: _PaymentOptionCard(
                 icon: Icons.call_split,
                 label: 'Bölerek Öde',
-                color: primary,
-                filled: false,
+                color: Colors.purple.shade400,
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -909,18 +1137,6 @@ class _PaymentOptionsRow extends ConsumerWidget {
                 ),
               ),
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _PaymentButton(
-                icon: Icons.payments,
-                label: 'Hepsini Öde',
-                color: accent,
-                filled: true,
-                onTap: hasActivePlan
-                    ? null
-                    : () => _startFullCheckout(context, ref),
-              ),
-            ),
           ],
         ),
       ],
@@ -928,69 +1144,62 @@ class _PaymentOptionsRow extends ConsumerWidget {
   }
 }
 
-class _PaymentButton extends StatelessWidget {
+class _PaymentOptionCard extends StatelessWidget {
   final IconData icon;
   final String label;
   final Color color;
-  final bool filled;
   final VoidCallback? onTap;
 
-  const _PaymentButton({
+  const _PaymentOptionCard({
     required this.icon,
     required this.label,
     required this.color,
-    required this.filled,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 68,
-      child: filled
-          ? FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: color,
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-              ),
-              onPressed: onTap,
-              child: _content(Colors.white),
-            )
-          : OutlinedButton(
-              style: OutlinedButton.styleFrom(
-                foregroundColor: color,
-                side: BorderSide(color: color.withOpacity(.4)),
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-              ),
-              onPressed: onTap,
-              child: _content(color),
-            ),
-    );
-  }
+    final disabled = onTap == null;
 
-  Widget _content(Color fg) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 20, color: fg),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: fg,
+    return Material(
+      color: disabled ? Colors.grey.shade100 : color.withOpacity(.08),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Container(
+          height: 56,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: disabled ? Colors.grey.shade300 : color.withOpacity(.3),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 18,
+                color: disabled ? Colors.grey.shade400 : color,
+              ),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: disabled ? Colors.grey.shade400 : color,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
-      ],
+      ),
     );
   }
 }
