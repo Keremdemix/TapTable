@@ -36,4 +36,7 @@ class ApiException implements Exception {
   bool get isUnauthorized => statusCode == 401;
   bool get isNotFound => statusCode == 404;
   bool get isBadRequest => statusCode == 400;
+  
+  @override
+  String toString() => message; 
 }

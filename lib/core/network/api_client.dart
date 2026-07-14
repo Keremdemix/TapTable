@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 import '../config/app_config.dart';
 import '../storage/token_storage.dart';
@@ -89,15 +91,20 @@ class ApiClient {
     }
   }
 
-  Future<Map<String, dynamic>> put(String path, {dynamic data}) async {
+  Future<dynamic> put(String path, {dynamic data}) async {
     try {
       final res = await dio.put(path, data: data);
+
+      // 👇 CRITICAL FIX (204 No Content)
+      if (res.statusCode == 204) {
+        return null;
+      }
+
       return res.data;
     } on DioException catch (e) {
       throw ApiException.fromDioError(e);
     }
   }
-
   Future<Map<String, dynamic>> patch(String path, {dynamic data}) async {
     try {
       final res = await dio.patch(path, data: data);
@@ -115,11 +122,59 @@ class ApiClient {
     }
   }
   Future<List<dynamic>> getList(String path, {Map<String, dynamic>? query}) async {
-  try {
-    final res = await dio.get(path, queryParameters: query);
-    return res.data as List<dynamic>;
-  } on DioException catch (e) {
-    throw ApiException.fromDioError(e);
+    try {
+      final res = await dio.get(path, queryParameters: query);
+      return res.data as List<dynamic>;
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
   }
-}
+
+  Future<String> uploadImage(Uint8List bytes, String fileName) async {
+    final formData = FormData.fromMap({
+      'file': MultipartFile.fromBytes(
+        bytes,
+        filename: fileName,
+      ),
+    });
+
+    final res = await dio.post('/images/menu-item', data: formData);
+
+    return res.data['url'] as String;
+  }
+  
+  Future<void> deleteImage(String url) async {
+    try {
+      await dio.delete('/images', data: {'url': url});
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+  
+  Future<void> updateRestaurantBranding({
+    required int restaurantId,
+    required String primaryColorHex,
+    required String accentColorHex,
+    Uint8List? logoBytes,
+    String? logoFileName,
+    bool removeLogo = false,
+  }) async {
+    final formMap = <String, dynamic>{
+      'primaryColorHex': primaryColorHex,
+      'accentColorHex': accentColorHex,
+      'removeLogo': removeLogo,
+    };
+
+    if (logoBytes != null && logoFileName != null) {
+      formMap['logo'] = MultipartFile.fromBytes(logoBytes, filename: logoFileName);
+    }
+
+    final formData = FormData.fromMap(formMap);
+
+    try {
+      await dio.put('/restaurants/$restaurantId/branding', data: formData);
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
 }

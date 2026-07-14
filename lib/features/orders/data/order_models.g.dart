@@ -12,9 +12,10 @@ _$OrderItemResponseDtoImpl _$$OrderItemResponseDtoImplFromJson(
   id: (json['id'] as num).toInt(),
   menuItemId: (json['menuItemId'] as num).toInt(),
   menuItemName: json['menuItemName'] as String,
+  menuItemImageUrl: json['menuItemImageUrl'] as String?,
   quantity: (json['quantity'] as num).toInt(),
-  unitPrice: _toDouble(json['unitPrice']),
-  lineTotal: _toDouble(json['lineTotal']),
+  unitPrice: (json['unitPrice'] as num).toDouble(),
+  lineTotal: (json['lineTotal'] as num).toDouble(),
   note: json['note'] as String?,
   status: $enumDecode(_$OrderItemStatusEnumMap, json['status']),
 );
@@ -25,6 +26,7 @@ Map<String, dynamic> _$$OrderItemResponseDtoImplToJson(
   'id': instance.id,
   'menuItemId': instance.menuItemId,
   'menuItemName': instance.menuItemName,
+  'menuItemImageUrl': instance.menuItemImageUrl,
   'quantity': instance.quantity,
   'unitPrice': instance.unitPrice,
   'lineTotal': instance.lineTotal,
@@ -53,7 +55,7 @@ _$OrderResponseDtoImpl _$$OrderResponseDtoImplFromJson(
     _$OrderPaymentStatusEnumMap,
     json['paymentStatus'],
   ),
-  totalPrice: _toDouble(json['totalPrice']),
+  totalPrice: (json['totalPrice'] as num).toDouble(),
   note: json['note'] as String?,
   items: (json['items'] as List<dynamic>)
       .map((e) => OrderItemResponseDto.fromJson(e as Map<String, dynamic>))

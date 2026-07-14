@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'features/auth/presentation/splash_screen.dart';
 import 'features/auth/presentation/login_screen.dart';
-import 'features/auth/presentation/role_home_screens.dart' hide KitchenHomeScreen;
 import 'features/orders/presentation/kitchen_home_screen.dart';
-
+import 'features/admin/presentation/admin_home_screen.dart';
+import 'features/waiter/presentation/waiter_home_screen.dart';
 void main() {
   runApp(const ProviderScope(child: TapTableStaffApp()));
 }
