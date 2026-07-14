@@ -304,7 +304,6 @@ mixin _$MenuItemResponseDto {
   String get categoryName => throw _privateConstructorUsedError;
   String get name => throw _privateConstructorUsedError;
   String? get description => throw _privateConstructorUsedError;
-  @JsonKey(fromJson: _toDouble)
   double get price => throw _privateConstructorUsedError;
   String? get imageUrl => throw _privateConstructorUsedError;
   bool get isAvailable => throw _privateConstructorUsedError;
@@ -336,7 +335,7 @@ abstract class $MenuItemResponseDtoCopyWith<$Res> {
     String categoryName,
     String name,
     String? description,
-    @JsonKey(fromJson: _toDouble) double price,
+    double price,
     String? imageUrl,
     bool isAvailable,
     bool isActive,
@@ -445,7 +444,7 @@ abstract class _$$MenuItemResponseDtoImplCopyWith<$Res>
     String categoryName,
     String name,
     String? description,
-    @JsonKey(fromJson: _toDouble) double price,
+    double price,
     String? imageUrl,
     bool isAvailable,
     bool isActive,
@@ -546,7 +545,7 @@ class _$MenuItemResponseDtoImpl implements _MenuItemResponseDto {
     required this.categoryName,
     required this.name,
     this.description,
-    @JsonKey(fromJson: _toDouble) required this.price,
+    required this.price,
     this.imageUrl,
     required this.isAvailable,
     required this.isActive,
@@ -569,7 +568,6 @@ class _$MenuItemResponseDtoImpl implements _MenuItemResponseDto {
   @override
   final String? description;
   @override
-  @JsonKey(fromJson: _toDouble)
   final double price;
   @override
   final String? imageUrl;
@@ -659,7 +657,7 @@ abstract class _MenuItemResponseDto implements MenuItemResponseDto {
     required final String categoryName,
     required final String name,
     final String? description,
-    @JsonKey(fromJson: _toDouble) required final double price,
+    required final double price,
     final String? imageUrl,
     required final bool isAvailable,
     required final bool isActive,
@@ -682,7 +680,6 @@ abstract class _MenuItemResponseDto implements MenuItemResponseDto {
   @override
   String? get description;
   @override
-  @JsonKey(fromJson: _toDouble)
   double get price;
   @override
   String? get imageUrl;

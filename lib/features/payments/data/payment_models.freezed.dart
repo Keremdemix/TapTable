@@ -23,7 +23,6 @@ PaymentResponseDto _$PaymentResponseDtoFromJson(Map<String, dynamic> json) {
 mixin _$PaymentResponseDto {
   int get id => throw _privateConstructorUsedError;
   int get orderId => throw _privateConstructorUsedError;
-  @JsonKey(fromJson: _toDouble)
   double get amount => throw _privateConstructorUsedError;
   String get method => throw _privateConstructorUsedError;
   String get splitType => throw _privateConstructorUsedError;
@@ -51,7 +50,7 @@ abstract class $PaymentResponseDtoCopyWith<$Res> {
   $Res call({
     int id,
     int orderId,
-    @JsonKey(fromJson: _toDouble) double amount,
+    double amount,
     String method,
     String splitType,
     String status,
@@ -136,7 +135,7 @@ abstract class _$$PaymentResponseDtoImplCopyWith<$Res>
   $Res call({
     int id,
     int orderId,
-    @JsonKey(fromJson: _toDouble) double amount,
+    double amount,
     String method,
     String splitType,
     String status,
@@ -213,7 +212,7 @@ class _$PaymentResponseDtoImpl implements _PaymentResponseDto {
   const _$PaymentResponseDtoImpl({
     required this.id,
     required this.orderId,
-    @JsonKey(fromJson: _toDouble) required this.amount,
+    required this.amount,
     required this.method,
     required this.splitType,
     required this.status,
@@ -229,7 +228,6 @@ class _$PaymentResponseDtoImpl implements _PaymentResponseDto {
   @override
   final int orderId;
   @override
-  @JsonKey(fromJson: _toDouble)
   final double amount;
   @override
   final String method;
@@ -300,7 +298,7 @@ abstract class _PaymentResponseDto implements PaymentResponseDto {
   const factory _PaymentResponseDto({
     required final int id,
     required final int orderId,
-    @JsonKey(fromJson: _toDouble) required final double amount,
+    required final double amount,
     required final String method,
     required final String splitType,
     required final String status,
@@ -316,7 +314,6 @@ abstract class _PaymentResponseDto implements PaymentResponseDto {
   @override
   int get orderId;
   @override
-  @JsonKey(fromJson: _toDouble)
   double get amount;
   @override
   String get method;

@@ -11,7 +11,7 @@ _$PaymentResponseDtoImpl _$$PaymentResponseDtoImplFromJson(
 ) => _$PaymentResponseDtoImpl(
   id: (json['id'] as num).toInt(),
   orderId: (json['orderId'] as num).toInt(),
-  amount: _toDouble(json['amount']),
+  amount: (json['amount'] as num).toDouble(),
   method: json['method'] as String,
   splitType: json['splitType'] as String,
   status: json['status'] as String,

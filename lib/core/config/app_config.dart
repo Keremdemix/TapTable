@@ -1,6 +1,6 @@
 class AppConfig {
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://localhost:5014/api', // ← burayı güncelleyin
+    defaultValue: 'http://192.168.0.37:5014/api', // ← burayı güncelleyin
   );
 }
