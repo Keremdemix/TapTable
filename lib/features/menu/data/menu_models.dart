@@ -3,8 +3,6 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 part 'menu_models.freezed.dart';
 part 'menu_models.g.dart';
 
-double _toDouble(dynamic value) => (value as num).toDouble();
-
 @freezed
 class CategoryResponseDto with _$CategoryResponseDto {
   const factory CategoryResponseDto({

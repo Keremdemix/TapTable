@@ -3,29 +3,41 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 part 'order_models.freezed.dart';
 part 'order_models.g.dart';
 
-double _toDouble(dynamic value) => (value as num).toDouble();
-
 enum OrderItemStatus {
-  @JsonValue('Pending') pending,
-  @JsonValue('Preparing') preparing,
-  @JsonValue('Ready') ready,
-  @JsonValue('Served') served,
-  @JsonValue('Cancelled') cancelled,
+  @JsonValue('Pending')
+  pending,
+  @JsonValue('Preparing')
+  preparing,
+  @JsonValue('Ready')
+  ready,
+  @JsonValue('Served')
+  served,
+  @JsonValue('Cancelled')
+  cancelled,
 }
 
 enum OrderStatus {
-  @JsonValue('Pending') pending,
-  @JsonValue('Preparing') preparing,
-  @JsonValue('Ready') ready,
-  @JsonValue('Served') served,
-  @JsonValue('Completed') completed,
-  @JsonValue('Cancelled') cancelled,
+  @JsonValue('Pending')
+  pending,
+  @JsonValue('Preparing')
+  preparing,
+  @JsonValue('Ready')
+  ready,
+  @JsonValue('Served')
+  served,
+  @JsonValue('Completed')
+  completed,
+  @JsonValue('Cancelled')
+  cancelled,
 }
 
 enum OrderPaymentStatus {
-  @JsonValue('Unpaid') unpaid,
-  @JsonValue('PartiallyPaid') partiallyPaid,
-  @JsonValue('Paid') paid,
+  @JsonValue('Unpaid')
+  unpaid,
+  @JsonValue('PartiallyPaid')
+  partiallyPaid,
+  @JsonValue('Paid')
+  paid,
 }
 
 @freezed
@@ -34,6 +46,7 @@ class OrderItemResponseDto with _$OrderItemResponseDto {
     required int id,
     required int menuItemId,
     required String menuItemName,
+    String? menuItemImageUrl, // ← YENİ
     required int quantity,
     required double unitPrice,
     required double lineTotal,
@@ -74,8 +87,8 @@ class OrderItemInput {
   OrderItemInput({required this.menuItemId, required this.quantity, this.note});
 
   Map<String, dynamic> toJson() => {
-        'menuItemId': menuItemId,
-        'quantity': quantity,
-        'note': note,
-      };
+    'menuItemId': menuItemId,
+    'quantity': quantity,
+    'note': note,
+  };
 }

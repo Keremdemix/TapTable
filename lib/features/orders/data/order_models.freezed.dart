@@ -24,10 +24,9 @@ mixin _$OrderItemResponseDto {
   int get id => throw _privateConstructorUsedError;
   int get menuItemId => throw _privateConstructorUsedError;
   String get menuItemName => throw _privateConstructorUsedError;
+  String? get menuItemImageUrl => throw _privateConstructorUsedError; // ← YENİ
   int get quantity => throw _privateConstructorUsedError;
-  @JsonKey(fromJson: _toDouble)
   double get unitPrice => throw _privateConstructorUsedError;
-  @JsonKey(fromJson: _toDouble)
   double get lineTotal => throw _privateConstructorUsedError;
   String? get note => throw _privateConstructorUsedError;
   OrderItemStatus get status => throw _privateConstructorUsedError;
@@ -53,9 +52,10 @@ abstract class $OrderItemResponseDtoCopyWith<$Res> {
     int id,
     int menuItemId,
     String menuItemName,
+    String? menuItemImageUrl,
     int quantity,
-    @JsonKey(fromJson: _toDouble) double unitPrice,
-    @JsonKey(fromJson: _toDouble) double lineTotal,
+    double unitPrice,
+    double lineTotal,
     String? note,
     OrderItemStatus status,
   });
@@ -82,6 +82,7 @@ class _$OrderItemResponseDtoCopyWithImpl<
     Object? id = null,
     Object? menuItemId = null,
     Object? menuItemName = null,
+    Object? menuItemImageUrl = freezed,
     Object? quantity = null,
     Object? unitPrice = null,
     Object? lineTotal = null,
@@ -102,6 +103,10 @@ class _$OrderItemResponseDtoCopyWithImpl<
                 ? _value.menuItemName
                 : menuItemName // ignore: cast_nullable_to_non_nullable
                       as String,
+            menuItemImageUrl: freezed == menuItemImageUrl
+                ? _value.menuItemImageUrl
+                : menuItemImageUrl // ignore: cast_nullable_to_non_nullable
+                      as String?,
             quantity: null == quantity
                 ? _value.quantity
                 : quantity // ignore: cast_nullable_to_non_nullable
@@ -141,9 +146,10 @@ abstract class _$$OrderItemResponseDtoImplCopyWith<$Res>
     int id,
     int menuItemId,
     String menuItemName,
+    String? menuItemImageUrl,
     int quantity,
-    @JsonKey(fromJson: _toDouble) double unitPrice,
-    @JsonKey(fromJson: _toDouble) double lineTotal,
+    double unitPrice,
+    double lineTotal,
     String? note,
     OrderItemStatus status,
   });
@@ -166,6 +172,7 @@ class __$$OrderItemResponseDtoImplCopyWithImpl<$Res>
     Object? id = null,
     Object? menuItemId = null,
     Object? menuItemName = null,
+    Object? menuItemImageUrl = freezed,
     Object? quantity = null,
     Object? unitPrice = null,
     Object? lineTotal = null,
@@ -186,6 +193,10 @@ class __$$OrderItemResponseDtoImplCopyWithImpl<$Res>
             ? _value.menuItemName
             : menuItemName // ignore: cast_nullable_to_non_nullable
                   as String,
+        menuItemImageUrl: freezed == menuItemImageUrl
+            ? _value.menuItemImageUrl
+            : menuItemImageUrl // ignore: cast_nullable_to_non_nullable
+                  as String?,
         quantity: null == quantity
             ? _value.quantity
             : quantity // ignore: cast_nullable_to_non_nullable
@@ -218,9 +229,10 @@ class _$OrderItemResponseDtoImpl implements _OrderItemResponseDto {
     required this.id,
     required this.menuItemId,
     required this.menuItemName,
+    this.menuItemImageUrl,
     required this.quantity,
-    @JsonKey(fromJson: _toDouble) required this.unitPrice,
-    @JsonKey(fromJson: _toDouble) required this.lineTotal,
+    required this.unitPrice,
+    required this.lineTotal,
     this.note,
     required this.status,
   });
@@ -235,12 +247,13 @@ class _$OrderItemResponseDtoImpl implements _OrderItemResponseDto {
   @override
   final String menuItemName;
   @override
+  final String? menuItemImageUrl;
+  // ← YENİ
+  @override
   final int quantity;
   @override
-  @JsonKey(fromJson: _toDouble)
   final double unitPrice;
   @override
-  @JsonKey(fromJson: _toDouble)
   final double lineTotal;
   @override
   final String? note;
@@ -249,7 +262,7 @@ class _$OrderItemResponseDtoImpl implements _OrderItemResponseDto {
 
   @override
   String toString() {
-    return 'OrderItemResponseDto(id: $id, menuItemId: $menuItemId, menuItemName: $menuItemName, quantity: $quantity, unitPrice: $unitPrice, lineTotal: $lineTotal, note: $note, status: $status)';
+    return 'OrderItemResponseDto(id: $id, menuItemId: $menuItemId, menuItemName: $menuItemName, menuItemImageUrl: $menuItemImageUrl, quantity: $quantity, unitPrice: $unitPrice, lineTotal: $lineTotal, note: $note, status: $status)';
   }
 
   @override
@@ -262,6 +275,8 @@ class _$OrderItemResponseDtoImpl implements _OrderItemResponseDto {
                 other.menuItemId == menuItemId) &&
             (identical(other.menuItemName, menuItemName) ||
                 other.menuItemName == menuItemName) &&
+            (identical(other.menuItemImageUrl, menuItemImageUrl) ||
+                other.menuItemImageUrl == menuItemImageUrl) &&
             (identical(other.quantity, quantity) ||
                 other.quantity == quantity) &&
             (identical(other.unitPrice, unitPrice) ||
@@ -279,6 +294,7 @@ class _$OrderItemResponseDtoImpl implements _OrderItemResponseDto {
     id,
     menuItemId,
     menuItemName,
+    menuItemImageUrl,
     quantity,
     unitPrice,
     lineTotal,
@@ -309,9 +325,10 @@ abstract class _OrderItemResponseDto implements OrderItemResponseDto {
     required final int id,
     required final int menuItemId,
     required final String menuItemName,
+    final String? menuItemImageUrl,
     required final int quantity,
-    @JsonKey(fromJson: _toDouble) required final double unitPrice,
-    @JsonKey(fromJson: _toDouble) required final double lineTotal,
+    required final double unitPrice,
+    required final double lineTotal,
     final String? note,
     required final OrderItemStatus status,
   }) = _$OrderItemResponseDtoImpl;
@@ -326,12 +343,12 @@ abstract class _OrderItemResponseDto implements OrderItemResponseDto {
   @override
   String get menuItemName;
   @override
+  String? get menuItemImageUrl; // ← YENİ
+  @override
   int get quantity;
   @override
-  @JsonKey(fromJson: _toDouble)
   double get unitPrice;
   @override
-  @JsonKey(fromJson: _toDouble)
   double get lineTotal;
   @override
   String? get note;
@@ -359,7 +376,6 @@ mixin _$OrderResponseDto {
   String? get waiterName => throw _privateConstructorUsedError;
   OrderStatus get status => throw _privateConstructorUsedError;
   OrderPaymentStatus get paymentStatus => throw _privateConstructorUsedError;
-  @JsonKey(fromJson: _toDouble)
   double get totalPrice => throw _privateConstructorUsedError;
   String? get note => throw _privateConstructorUsedError;
   List<OrderItemResponseDto> get items => throw _privateConstructorUsedError;
@@ -391,7 +407,7 @@ abstract class $OrderResponseDtoCopyWith<$Res> {
     String? waiterName,
     OrderStatus status,
     OrderPaymentStatus paymentStatus,
-    @JsonKey(fromJson: _toDouble) double totalPrice,
+    double totalPrice,
     String? note,
     List<OrderItemResponseDto> items,
     DateTime createdAt,
@@ -500,7 +516,7 @@ abstract class _$$OrderResponseDtoImplCopyWith<$Res>
     String? waiterName,
     OrderStatus status,
     OrderPaymentStatus paymentStatus,
-    @JsonKey(fromJson: _toDouble) double totalPrice,
+    double totalPrice,
     String? note,
     List<OrderItemResponseDto> items,
     DateTime createdAt,
@@ -601,7 +617,7 @@ class _$OrderResponseDtoImpl implements _OrderResponseDto {
     this.waiterName,
     required this.status,
     required this.paymentStatus,
-    @JsonKey(fromJson: _toDouble) required this.totalPrice,
+    required this.totalPrice,
     this.note,
     required final List<OrderItemResponseDto> items,
     required this.createdAt,
@@ -626,7 +642,6 @@ class _$OrderResponseDtoImpl implements _OrderResponseDto {
   @override
   final OrderPaymentStatus paymentStatus;
   @override
-  @JsonKey(fromJson: _toDouble)
   final double totalPrice;
   @override
   final String? note;
@@ -718,7 +733,7 @@ abstract class _OrderResponseDto implements OrderResponseDto {
     final String? waiterName,
     required final OrderStatus status,
     required final OrderPaymentStatus paymentStatus,
-    @JsonKey(fromJson: _toDouble) required final double totalPrice,
+    required final double totalPrice,
     final String? note,
     required final List<OrderItemResponseDto> items,
     required final DateTime createdAt,
@@ -743,7 +758,6 @@ abstract class _OrderResponseDto implements OrderResponseDto {
   @override
   OrderPaymentStatus get paymentStatus;
   @override
-  @JsonKey(fromJson: _toDouble)
   double get totalPrice;
   @override
   String? get note;

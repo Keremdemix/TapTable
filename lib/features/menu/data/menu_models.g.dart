@@ -36,7 +36,7 @@ _$MenuItemResponseDtoImpl _$$MenuItemResponseDtoImplFromJson(
   categoryName: json['categoryName'] as String,
   name: json['name'] as String,
   description: json['description'] as String?,
-  price: _toDouble(json['price']),
+  price: (json['price'] as num).toDouble(),
   imageUrl: json['imageUrl'] as String?,
   isAvailable: json['isAvailable'] as bool,
   isActive: json['isActive'] as bool,

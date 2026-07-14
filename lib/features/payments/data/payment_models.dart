@@ -3,12 +3,13 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 part 'payment_models.freezed.dart';
 part 'payment_models.g.dart';
 
-double _toDouble(dynamic value) => (value as num).toDouble();
-
 enum PaymentMethodType {
-  @JsonValue('Cash') cash,
-  @JsonValue('Card') card,
-  @JsonValue('Iyzico') iyzico,
+  @JsonValue('Cash')
+  cash,
+  @JsonValue('Card')
+  card,
+  @JsonValue('Iyzico')
+  iyzico,
 }
 
 @freezed
