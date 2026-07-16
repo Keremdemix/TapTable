@@ -90,9 +90,38 @@ public class OrderService : IOrderService
         var order = await _orderRepository.GetByIdAsync(orderId, restaurantId)
             ?? throw new KeyNotFoundException($"Sipariş bulunamadı: {orderId}");
 
+        var derivedStatus = DeriveOrderStatus(order.Items);
+        if (derivedStatus.HasValue && order.Status != derivedStatus.Value)
+        {
+            order.Status = derivedStatus.Value;
+            order = await _orderRepository.UpdateAsync(order);
+        }
+
         return MapToDto(order);
     }
 
+    // ── Helpers ──────────────────────────────────────────────────────────
+
+    /// Sipariş durumunu, içindeki ürünlerin durumlarından türetir.
+    /// İptal edilen ürünler hesaba katılmaz (tamamen iptal edilmiş bir sipariş
+    /// ayrı bir akışla — UpdateOrderStatusAsync ile — Cancelled yapılır).
+    private static OrderStatus? DeriveOrderStatus(ICollection<OrderItem> items)
+    {
+        var relevant = items.Where(i => i.Status != OrderItemStatus.Cancelled).ToList();
+        if (relevant.Count == 0)
+            return null; // hepsi iptal — burada karar vermiyoruz
+
+        if (relevant.All(i => i.Status == OrderItemStatus.Served))
+            return OrderStatus.Served;
+
+        if (relevant.All(i => i.Status == OrderItemStatus.Ready || i.Status == OrderItemStatus.Served))
+            return OrderStatus.Ready;
+
+        if (relevant.Any(i => i.Status == OrderItemStatus.Preparing || i.Status == OrderItemStatus.Ready || i.Status == OrderItemStatus.Served))
+            return OrderStatus.Preparing;
+
+        return OrderStatus.Pending;
+    }
     public async Task<OrderResponseDto> UpdateOrderStatusAsync(int orderId, int restaurantId, OrderStatus status)
     {
         var order = await _orderRepository.GetByIdAsync(orderId, restaurantId)
