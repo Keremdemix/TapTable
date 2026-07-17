@@ -149,6 +149,7 @@ public class PaymentService : IPaymentService
             {
                 OrderItemId = i.Id,
                 MenuItemName = i.MenuItem?.Name ?? string.Empty,
+                MenuItemImageUrl = i.MenuItem?.ImageUrl,
                 UnitPrice = i.UnitPrice,
                 Quantity = i.Quantity,
                 PaidQuantity = i.PaidQuantity
