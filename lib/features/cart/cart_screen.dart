@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tap_table_customer/core/theme/restaurant_theme_provider.dart';
 import 'package:tap_table_customer/features/cart/cart_models.dart';
 import 'package:tap_table_customer/features/payment/payment_models.dart';
 import 'package:tap_table_customer/features/payment/payment_progress_badge.dart';
@@ -72,16 +73,12 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     final newItemsCount = ref.watch(cartCountProvider);
     final activeOrderAsync = ref.watch(activeOrderProvider);
 
-    final sessionAsync = ref.watch(customerSessionProvider);
-    final session = sessionAsync.value;
+    ref.watch(customerSessionProvider);
 
-    final primary = session != null
-        ? colorFromHex(session.primaryColorHex)
-        : Theme.of(context).colorScheme.primary;
+    // session null olsa bile safeColorFromHex bunu yakalar ve yedek (fallback) rengi döner.
+    final primary = ref.watch(restaurantThemeProvider).primary;
 
-    final accent = session != null
-        ? colorFromHex(session.accentColorHex)
-        : Colors.deepOrange;
+    final accent = ref.watch(restaurantThemeProvider).accent;
 
     final order = activeOrderAsync.when(
       data: (o) => o,
@@ -483,9 +480,9 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
           const SizedBox(height: 10),
 
-          ...order.items.map(
-            (item) => _PreviousOrderTile(
-              item: item,
+          ..._groupOrderItems(order.items).map(
+            (group) => _PreviousOrderGroupTile(
+              group: group,
               createdAt: order.createdAt,
               primary: primary,
               accent: accent,
@@ -520,14 +517,14 @@ class _CartScreenState extends ConsumerState<CartScreen> {
   }
 }
 
-class _PreviousOrderTile extends StatelessWidget {
-  final OrderItemResponse item;
+class _PreviousOrderGroupTile extends StatelessWidget {
+  final _OrderItemGroup group;
   final DateTime createdAt;
   final Color primary;
   final Color accent;
 
-  const _PreviousOrderTile({
-    required this.item,
+  const _PreviousOrderGroupTile({
+    required this.group,
     required this.createdAt,
     required this.primary,
     required this.accent,
@@ -538,7 +535,7 @@ class _PreviousOrderTile extends StatelessWidget {
     final time = TimeOfDay.fromDateTime(createdAt.toLocal());
     final timeStr =
         '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
-    final hasNote = item.note != null && item.note!.isNotEmpty;
+    final hasNote = group.hasNote;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -552,23 +549,56 @@ class _PreviousOrderTile extends StatelessWidget {
         children: [
           Row(
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child:
-                    item.menuItemImageUrl != null &&
-                        item.menuItemImageUrl!.isNotEmpty
-                    ? CachedNetworkImage(
-                        imageUrl: item.menuItemImageUrl!,
-                        width: 64,
-                        height: 64,
-                        fit: BoxFit.cover,
-                      )
-                    : Container(
-                        width: 64,
-                        height: 64,
-                        color: Colors.grey.shade300,
-                        child: const Icon(Icons.fastfood, color: Colors.white),
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child:
+                        group.menuItemImageUrl != null &&
+                            group.menuItemImageUrl!.isNotEmpty
+                        ? CachedNetworkImage(
+                            imageUrl: group.menuItemImageUrl!,
+                            width: 64,
+                            height: 64,
+                            fit: BoxFit.cover,
+                          )
+                        : Container(
+                            width: 64,
+                            height: 64,
+                            color: Colors.grey.shade300,
+                            child: const Icon(
+                              Icons.fastfood,
+                              color: Colors.white,
+                            ),
+                          ),
+                  ),
+                  // --- x2 / x4 rozeti ---
+                  if (group.totalQuantity > 1)
+                    Positioned(
+                      right: -6,
+                      top: -6,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: primary,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.white, width: 1.5),
+                        ),
+                        child: Text(
+                          'x${group.totalQuantity}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
                       ),
+                    ),
+                ],
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -576,7 +606,7 @@ class _PreviousOrderTile extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      item.menuItemName,
+                      group.menuItemName,
                       style: const TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 15,
@@ -584,7 +614,7 @@ class _PreviousOrderTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${item.quantity} Adet',
+                      '${group.totalQuantity} Adet',
                       style: TextStyle(
                         color: Colors.grey.shade600,
                         fontSize: 13,
@@ -592,7 +622,7 @@ class _PreviousOrderTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '₺${item.lineTotal.toStringAsFixed(2)}',
+                      '₺${group.totalLineTotal.toStringAsFixed(2)}',
                       style: TextStyle(
                         color: primary,
                         fontWeight: FontWeight.w700,
@@ -605,7 +635,7 @@ class _PreviousOrderTile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   _StatusChip(
-                    status: item.status,
+                    status: group.status,
                     primary: primary,
                     accent: accent,
                   ),
@@ -620,34 +650,44 @@ class _PreviousOrderTile extends StatelessWidget {
           ),
           if (hasNote) ...[
             const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.amber.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.amber.shade200),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.sticky_note_2,
-                    size: 15,
-                    color: Colors.amber.shade800,
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      item.note!,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.amber.shade900,
+            ...group.items
+                .where((i) => i.note != null && i.note!.isNotEmpty)
+                .map(
+                  (i) => Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.amber.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.sticky_note_2,
+                            size: 15,
+                            color: Colors.amber.shade800,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              i.note!,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.amber.shade900,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                ],
-              ),
-            ),
+                ),
           ],
         ],
       ),
@@ -993,16 +1033,66 @@ class _NewCartTile extends ConsumerWidget {
   }
 }
 
-Color colorFromHex(String hex) {
-  final buffer = StringBuffer();
+class _OrderItemGroup {
+  final String menuItemName;
+  final String? menuItemImageUrl;
+  final double unitPrice;
+  final String status;
+  final List<OrderItemResponse> items;
 
-  if (hex.replaceFirst('#', '').length == 6) {
-    buffer.write('ff');
+  _OrderItemGroup({
+    required this.menuItemName,
+    required this.menuItemImageUrl,
+    required this.unitPrice,
+    required this.status,
+    required this.items,
+  });
+
+  int get totalQuantity => items.fold(0, (sum, i) => sum + i.quantity);
+  double get totalLineTotal => items.fold(0, (sum, i) => sum + i.lineTotal);
+  bool get hasNote => items.any((i) => i.note != null && i.note!.isNotEmpty);
+  bool get isMerged => items.length > 1;
+}
+
+List<_OrderItemGroup> _groupOrderItems(List<OrderItemResponse> items) {
+  final List<_OrderItemGroup> result = [];
+  final Map<String, int> keyToIndex = {};
+
+  for (final item in items) {
+    final hasNote = item.note != null && item.note!.isNotEmpty;
+
+    if (hasNote) {
+      // Notlu ürünler asla birleştirilmez.
+      result.add(
+        _OrderItemGroup(
+          menuItemName: item.menuItemName,
+          menuItemImageUrl: item.menuItemImageUrl,
+          unitPrice: item.unitPrice,
+          status: item.status,
+          items: [item],
+        ),
+      );
+      continue;
+    }
+
+    final key = '${item.menuItemId}_${item.status}';
+    if (keyToIndex.containsKey(key)) {
+      result[keyToIndex[key]!].items.add(item);
+    } else {
+      keyToIndex[key] = result.length;
+      result.add(
+        _OrderItemGroup(
+          menuItemName: item.menuItemName,
+          menuItemImageUrl: item.menuItemImageUrl,
+          unitPrice: item.unitPrice,
+          status: item.status,
+          items: [item],
+        ),
+      );
+    }
   }
 
-  buffer.write(hex.replaceFirst('#', ''));
-
-  return Color(int.parse(buffer.toString(), radix: 16));
+  return result;
 }
 
 class _PaymentOptionsRow extends ConsumerWidget {
@@ -1131,8 +1221,10 @@ class _PaymentOptionsRow extends ConsumerWidget {
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) =>
-                        SplitPaymentScreen(primary: primary, accent: accent),
+                    builder: (_) => SplitPaymentScreen(
+                      primary: primary,
+                      accent: accent,
+                    ),
                   ),
                 ),
               ),

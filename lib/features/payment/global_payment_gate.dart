@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tap_table_customer/core/theme/restaurant_theme_provider.dart';
 import '../../main.dart';
-import '../cart/cart_screen.dart' show colorFromHex;
-import '../../core/session/session_provider.dart';
 import 'payment_provider.dart';
 import 'thank_you_screen.dart';
 
@@ -48,20 +47,15 @@ class _GlobalPaymentGateState extends ConsumerState<GlobalPaymentGate> {
   }
 
   Future<void> _goToThankYou() async {
-    final session = ref.read(customerSessionProvider).value;
-    final primary = session != null
-        ? colorFromHex(session.primaryColorHex)
-        : Colors.black87;
-    final accent = session != null
-        ? colorFromHex(session.accentColorHex)
-        : Colors.deepOrange;
-
     final nav = navigatorKey.currentState;
     if (nav == null) return;
 
     await nav.pushAndRemoveUntil(
       MaterialPageRoute(
-        builder: (_) => ThankYouScreen(primary: primary, accent: accent),
+        builder: (_) => ThankYouScreen(
+          primary: ref.watch(restaurantThemeProvider).primary,
+          accent: ref.watch(restaurantThemeProvider).accent,
+        ),
       ),
       (route) => false,
     );

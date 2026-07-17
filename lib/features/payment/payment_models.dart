@@ -1,6 +1,7 @@
 class PaymentStateItem {
   final int orderItemId;
   final String menuItemName;
+  final String? menuItemImageUrl;
   final double unitPrice;
   final int quantity;
   final int paidQuantity;
@@ -8,6 +9,7 @@ class PaymentStateItem {
   PaymentStateItem({
     required this.orderItemId,
     required this.menuItemName,
+    this.menuItemImageUrl,
     required this.unitPrice,
     required this.quantity,
     required this.paidQuantity,
@@ -21,6 +23,7 @@ class PaymentStateItem {
     return PaymentStateItem(
       orderItemId: json['orderItemId'] as int,
       menuItemName: json['menuItemName'] as String,
+      menuItemImageUrl: json['menuItemImageUrl'] as String?,
       unitPrice: (json['unitPrice'] as num).toDouble(),
       quantity: json['quantity'] as int,
       paidQuantity: json['paidQuantity'] as int,

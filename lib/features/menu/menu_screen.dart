@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tap_table_customer/core/theme/restaurant_theme_provider.dart';
 import 'package:tap_table_customer/features/cart/cart_models.dart';
 import 'package:tap_table_customer/features/cart/cart_provider.dart';
 import 'package:tap_table_customer/features/cart/cart_screen.dart';
@@ -41,8 +42,6 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
   @override
   Widget build(BuildContext context) {
     final menuAsync = ref.watch(publicMenuProvider);
-    final primary = Theme.of(context).colorScheme.primary;
-    final accent = Theme.of(context).colorScheme.secondary;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7F7F8),
@@ -103,14 +102,17 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                     _NewItemsRow(
                       lines: cartLines,
                       total: newTotal,
-                      primary: primary,
+                      primary: ref.watch(restaurantThemeProvider).primary,
                     ),
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     child: Divider(height: 1, color: Colors.grey.shade200),
                   ),
                   if (paymentState != null)
-                    PaymentProgressBadge(state: paymentState, accent: primary),
+                    PaymentProgressBadge(
+                      state: paymentState,
+                      accent: ref.watch(restaurantThemeProvider).accent,
+                    ),
                   Row(
                     children: [
                       Expanded(
@@ -139,7 +141,9 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                       ),
                       FilledButton.icon(
                         style: FilledButton.styleFrom(
-                          backgroundColor: primary,
+                          backgroundColor: ref
+                              .watch(restaurantThemeProvider)
+                              .primary,
                           padding: const EdgeInsets.symmetric(
                             horizontal: 20,
                             vertical: 14,
@@ -188,7 +192,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                 pinned: true,
                 stretch: true,
                 expandedHeight: 190,
-                backgroundColor: primary,
+                backgroundColor: ref.watch(restaurantThemeProvider).primary,
                 elevation: 0,
                 automaticallyImplyLeading:
                     false, // geri butonu da istemiyorsan kalsın
@@ -198,8 +202,8 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                   background: _RestaurantHeader(
                     name: widget.session.restaurantName,
                     logoUrl: widget.session.logoUrl,
-                    primary: primary,
-                    accent: accent,
+                    primary: ref.watch(restaurantThemeProvider).primary,
+                    accent: ref.watch(restaurantThemeProvider).accent,
                   ),
                 ),
               ),
@@ -210,7 +214,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                   categories: menu.categories,
                   activeCategoryId: _activeCategoryId,
                   onSelect: _scrollToCategory,
-                  primary: primary,
+                  primary: ref.watch(restaurantThemeProvider).primary,
                 ),
               ),
 
@@ -226,7 +230,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                           width: 4,
                           height: 18,
                           decoration: BoxDecoration(
-                            color: primary,
+                            color: ref.watch(restaurantThemeProvider).primary,
                             borderRadius: BorderRadius.circular(4),
                           ),
                         ),
@@ -523,8 +527,6 @@ class _NewItemThumb extends ConsumerWidget {
     final hasImage =
         line.item.imageUrl != null && line.item.imageUrl!.isNotEmpty;
 
-    final primary = Theme.of(context).colorScheme.primary;
-
     return SizedBox(
       width: 72,
       child: Column(
@@ -578,7 +580,7 @@ class _NewItemThumb extends ConsumerWidget {
                       vertical: 1,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.deepOrange,
+                      color: ref.watch(restaurantThemeProvider).accent,
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: Colors.white, width: 1.5),
                     ),
@@ -608,7 +610,7 @@ class _NewItemThumb extends ConsumerWidget {
           Container(
             height: 22,
             decoration: BoxDecoration(
-              color: primary,
+              color: ref.watch(restaurantThemeProvider).primary,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
@@ -735,7 +737,6 @@ class _MenuItemCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final accent = Theme.of(context).colorScheme.secondary;
     final quantity = ref.watch(
       cartProvider.select((cart) => cart[item.id]?.quantity ?? 0),
     );
@@ -819,14 +820,17 @@ class _MenuItemCard extends ConsumerWidget {
                         vertical: 5,
                       ),
                       decoration: BoxDecoration(
-                        color: accent.withOpacity(0.10),
+                        color: ref
+                            .watch(restaurantThemeProvider)
+                            .accent
+                            .withOpacity(0.10),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
                         '₺${item.price.toStringAsFixed(2)}',
                         style: TextStyle(
                           fontWeight: FontWeight.w800,
-                          color: accent,
+                          color: ref.watch(restaurantThemeProvider).accent,
                           fontSize: 14,
                         ),
                       ),
@@ -839,6 +843,9 @@ class _MenuItemCard extends ConsumerWidget {
                           ? FilledButton.icon(
                               key: const ValueKey('add'),
                               style: FilledButton.styleFrom(
+                                backgroundColor: ref
+                                    .watch(restaurantThemeProvider)
+                                    .primary,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(10),
                                 ),
@@ -876,7 +883,7 @@ class _QuantityStepper extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final accent = Theme.of(context).colorScheme.secondary;
+    final accent = ref.watch(restaurantThemeProvider).accent;
 
     return Container(
       decoration: BoxDecoration(
