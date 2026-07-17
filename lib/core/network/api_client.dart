@@ -11,7 +11,7 @@ class ApiClient {
         BaseOptions(
           baseUrl: const String.fromEnvironment(
             'API_BASE_URL',
-            defaultValue: 'http://localhost:5014/api',
+            defaultValue: 'http://192.168.0.37:5014/api',
           ),
           connectTimeout: const Duration(seconds: 10),
           receiveTimeout: const Duration(seconds: 10),

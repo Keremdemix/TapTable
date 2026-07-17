@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/session/session_provider.dart';
-import '../../theme/restaurant_theme.dart';
 import '../menu/menu_screen.dart';
 
 class EntryScreen extends ConsumerStatefulWidget {
@@ -31,16 +30,13 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
         error: (err, _) => Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
-            child: Text('Bir şeyler ters gitti: $err', textAlign: TextAlign.center),
+            child: Text(
+              'Bir şeyler ters gitti: $err',
+              textAlign: TextAlign.center,
+            ),
           ),
         ),
-        data: (session) => Theme(
-          data: buildRestaurantTheme(
-            primaryColorHex: session.primaryColorHex,
-            accentColorHex: session.accentColorHex,
-          ),
-          child: MenuScreen(session: session),
-        ),
+        data: (session) => MenuScreen(session: session),
       ),
     );
   }
