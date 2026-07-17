@@ -22,6 +22,7 @@ public class PaymentStateItemDto
 {
     public int OrderItemId { get; set; }
     public string MenuItemName { get; set; } = null!;
+    public string MenuItemImageUrl { get; set; } = null!;
     public decimal UnitPrice { get; set; }
     public int Quantity { get; set; }
     public int PaidQuantity { get; set; }
