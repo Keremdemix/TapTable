@@ -77,4 +77,17 @@ public class OrderController : ControllerBase
         var order = await _orderService.UpdateOrderStatusAsync(id, RestaurantId, request.Status);
         return Ok(order);
     }
+
+    /// <summary>
+    /// Garson "Teslim Edildi" der — o masadaki aktif siparişte Ready durumundaki
+    /// TÜM ürünler Served'a geçer, diğer durumdaki ürünlere dokunulmaz.
+    /// PATCH /api/orders/tables/{tableId}/serve-ready-items
+    /// </summary>
+    [HttpPatch("tables/{tableId:int}/serve-ready-items")]
+    [Authorize(Roles = "Admin,Waiter")]
+    public async Task<IActionResult> ServeReadyItemsByTable(int tableId)
+    {
+        var order = await _orderService.ServeReadyItemsByTableAsync(tableId, RestaurantId);
+        return Ok(order);
+    }
 }

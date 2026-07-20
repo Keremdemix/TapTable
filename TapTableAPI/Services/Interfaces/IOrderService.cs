@@ -17,4 +17,5 @@ public interface IOrderService
     Task<OrderResponseDto> GetOrderAsync(int orderId, int restaurantId);
     Task<OrderResponseDto> UpdateOrderItemStatusAsync(int orderId, int itemId, int restaurantId, OrderItemStatus status);
     Task<OrderResponseDto> UpdateOrderStatusAsync(int orderId, int restaurantId, OrderStatus status);
+    Task<OrderResponseDto> ServeReadyItemsByTableAsync(int tableId, int restaurantId);
 }

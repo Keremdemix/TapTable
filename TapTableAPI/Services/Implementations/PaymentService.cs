@@ -404,7 +404,7 @@ public class PaymentService : IPaymentService
                 Country = "Turkey",
                 Ip = buyerIp
             },
-            ShippingAddress = new Address                          // ← EKLE
+            ShippingAddress = new Address
             {
                 ContactName = "Misafir",
                 City = "Istanbul",
@@ -412,7 +412,7 @@ public class PaymentService : IPaymentService
                 Description = restaurant.Address ?? "Adres belirtilmedi",
                 ZipCode = "34000"
             },
-            BillingAddress = new Address                            // ← EKLE
+            BillingAddress = new Address
             {
                 ContactName = "Misafir",
                 City = "Istanbul",
@@ -491,17 +491,17 @@ public class PaymentService : IPaymentService
     // Artık normal akışta kullanılmıyor (checkout doğrudan iyzico'ya bağlı).
     // Sadece test/sandbox arızasında dev tool olarak kalsın diye bırakıldı.
 
-    public async Task<PaymentResponseDto> ConfirmTestPaymentAsync(int paymentId)
-    {
-        var payment = await _paymentRepository.GetByIdWithDetailsAsync(paymentId)
-            ?? throw new KeyNotFoundException($"Ödeme bulunamadı: {paymentId}");
+    //public async Task<PaymentResponseDto> ConfirmTestPaymentAsync(int paymentId)
+    //{
+    //    var payment = await _paymentRepository.GetByIdWithDetailsAsync(paymentId)
+    //        ?? throw new KeyNotFoundException($"Ödeme bulunamadı: {paymentId}");
 
-        if (payment.Status == PaymentStatus.Succeeded)
-            return MapToDto(payment);
+    //    if (payment.Status == PaymentStatus.Succeeded)
+    //        return MapToDto(payment);
 
-        await SettleSucceededPaymentAsync(payment);
-        return MapToDto(payment);
-    }
+    //    await SettleSucceededPaymentAsync(payment);
+    //    return MapToDto(payment);
+    //}
 
     // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -539,6 +539,15 @@ public class PaymentService : IPaymentService
         await SettleOrderIfFullyPaidAsync(order);
     }
 
+    /// <summary>
+    /// Ödeme tutarına göre PaymentStatus'u günceller (Paid/PartiallyPaid).
+    /// ÖNEMLİ: Paid olması TEK BAŞINA masayı kapatmaz. Masa/sipariş ancak
+    /// Paid + (iptal hariç) TÜM ürünler Served olduğunda Completed'a düşer
+    /// ve boşalır — aksi halde ödeme kaydedilir (PaidQuantity işaretlenir,
+    /// iyzico onayı alınır) ama masa Dolu kalmaya devam eder. Ürünler daha
+    /// sonra teslim edildiğinde (garson "Teslim Edildi" der) kapanış
+    /// OrderService.TryCompleteIfPaidAndServedAsync üzerinden tamamlanır.
+    /// </summary>
     private async Task SettleOrderIfFullyPaidAsync(Order order)
     {
         var totalPaid = await _paymentRepository.GetSucceededTotalAsync(order.Id);
@@ -549,27 +558,43 @@ public class PaymentService : IPaymentService
 
         if (order.PaymentStatus == OrderPaymentStatus.Paid)
         {
-            order.Status = OrderStatus.Completed;
-
             foreach (var item in order.Items)
             {
                 if (item.PaidQuantity < item.Quantity)
                     item.PaidQuantity = item.Quantity;
             }
 
-            var table = await _tableRepository.GetByIdAsync(order.TableId, order.Table.RestaurantId);
-            if (table is not null)
+            if (AllRelevantItemsServed(order.Items))
             {
-                table.Status = TableStatus.Available;
-                await _tableRepository.UpdateAsync(table);
+                await CompleteOrderAndFreeTableAsync(order);
             }
 
-            await _qrSessionRepository.RotateSessionAsync(order.TableId, order.Table.RestaurantId);
-
+            // Onay, servis durumundan bağımsız — ödeme finansal olarak
+            // gerçekleşti, iyzico tarafında capture edilmeli.
             await ApproveIyzicoItemsIfNeededAsync(order);
         }
 
         await _orderRepository.UpdateAsync(order);
+    }
+
+    private static bool AllRelevantItemsServed(ICollection<Data.Entities.OrderItem> items)
+    {
+        var relevant = items.Where(i => i.Status != OrderItemStatus.Cancelled).ToList();
+        return relevant.Count > 0 && relevant.All(i => i.Status == OrderItemStatus.Served);
+    }
+
+    private async Task CompleteOrderAndFreeTableAsync(Order order)
+    {
+        order.Status = OrderStatus.Completed;
+
+        var table = await _tableRepository.GetByIdAsync(order.TableId, order.Table.RestaurantId);
+        if (table is not null)
+        {
+            table.Status = TableStatus.Available;
+            await _tableRepository.UpdateAsync(table);
+        }
+
+        await _qrSessionRepository.RotateSessionAsync(order.TableId, order.Table.RestaurantId);
     }
 
     private async Task ApproveIyzicoItemsIfNeededAsync(Order order)

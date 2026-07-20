@@ -361,4 +361,6 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
-/TapTableAPI/appsettings.json
+# Local environment configuration
+appsettings.Development.json
+appsettings.Production.json

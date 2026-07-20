@@ -48,6 +48,28 @@ public class AuthService : IAuthService
             User = MapToUserProfileDto(user)
         };
     }
+    //public async Task<AuthResponseDto> LoginAsync(LoginRequest request)
+    //{
+    //    var user = await _authRepository.GetUserByEmailAsync(request.Email)
+    //        ?? throw new UnauthorizedAccessException("Kullanıcı bulunamadı.");
+
+    //    var accessToken = GenerateAccessToken(user);
+    //    var refreshToken = GenerateRefreshToken();
+
+    //    user.RefreshToken = refreshToken;
+    //    user.RefreshTokenExpiry =
+    //        DateTime.UtcNow.AddDays(_jwtSettings.RefreshTokenExpiryDays);
+
+    //    await _authRepository.UpdateUserAsync(user);
+
+    //    return new AuthResponseDto
+    //    {
+    //        AccessToken = accessToken,
+    //        RefreshToken = refreshToken,
+    //        ExpiresIn = _jwtSettings.ExpiryMinutes * 60,
+    //        User = MapToUserProfileDto(user)
+    //    };
+    //}
 
     public async Task<AuthResponseDto> RefreshTokenAsync(string refreshToken)
     {

@@ -22,5 +22,5 @@ public interface IPaymentService
     Task<bool> HandleIyzicoCallbackAsync(string token);
 
     // GEÇİCİ — dev/sandbox fallback, normal akışta kullanılmıyor
-    Task<PaymentResponseDto> ConfirmTestPaymentAsync(int paymentId);
+    //Task<PaymentResponseDto> ConfirmTestPaymentAsync(int paymentId);
 }
