@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tap_table_staff/core/constants/layout_constants.dart';
 import 'package:tap_table_staff/features/waiter/application/ready_alert_provider.dart';
 import '../../auth/application/auth_providers.dart';
+import '../../orders/application/order_providers.dart';
 import '../../orders/data/order_models.dart';
 import '../../tables/application/table_providers.dart';
 import '../../tables/data/table_layout_models.dart';
@@ -455,9 +456,9 @@ class _WaiterHomeScreenState extends ConsumerState<WaiterHomeScreen>
   }
 }
 
-/// Mutfakta hazır olarak işaretlenmiş, garson tarafından henüz görülmemiş
-/// masaların etrafında yanıp sönen turuncu bir hâle (glow) gösterir.
-/// Garson masaya tıklayana kadar (ReadyAlertNotifier.acknowledge) sürer.
+/// Mutfakta hazır olarak işaretlenmiş masaların etrafında yanıp sönen
+/// turuncu bir hâle (glow) gösterir. O masadaki tüm Ready ürünler Served
+/// olana kadar sürer (bkz. ReadyAlertNotifier).
 class _ReadyGlow extends StatefulWidget {
   final bool isFlashing;
   final Widget child;
@@ -604,7 +605,7 @@ class _ZoomButton extends StatelessWidget {
   }
 }
 
-class _TableSidebar extends ConsumerWidget {
+class _TableSidebar extends ConsumerStatefulWidget {
   final TableLayoutResponseDto table;
   final VoidCallback onClose;
   final VoidCallback onOpenFullDetail;
@@ -616,8 +617,37 @@ class _TableSidebar extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final orderAsync = ref.watch(tableActiveOrderProvider(table.tableId));
+  ConsumerState<_TableSidebar> createState() => _TableSidebarState();
+}
+
+class _TableSidebarState extends ConsumerState<_TableSidebar> {
+  bool _serving = false;
+
+  Future<void> _serveReadyItems() async {
+    setState(() => _serving = true);
+    try {
+      await ref
+          .read(orderRepositoryProvider)
+          .serveReadyItems(widget.table.tableId);
+      ref.invalidate(tableActiveOrderProvider(widget.table.tableId));
+      // Poll'u beklemeden masa parlamasını hemen kapat.
+      await ref.read(readyAlertProvider.notifier).refresh();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Teslim işlemi başarısız: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _serving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final orderAsync = ref.watch(
+      tableActiveOrderProvider(widget.table.tableId),
+    );
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
@@ -635,7 +665,7 @@ class _TableSidebar extends ConsumerWidget {
               children: [
                 Expanded(
                   child: Text(
-                    'Masa ${table.tableNumber}',
+                    'Masa ${widget.table.tableNumber}',
                     style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
@@ -647,7 +677,7 @@ class _TableSidebar extends ConsumerWidget {
                   icon: const Icon(Icons.close, size: 18),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
-                  onPressed: onClose,
+                  onPressed: widget.onClose,
                 ),
               ],
             ),
@@ -677,12 +707,12 @@ class _TableSidebar extends ConsumerWidget {
                                 context,
                                 MaterialPageRoute(
                                   builder: (_) => WaiterItemPickerScreen(
-                                    tableId: table.tableId,
+                                    tableId: widget.table.tableId,
                                   ),
                                 ),
                               );
                               ref.invalidate(
-                                tableActiveOrderProvider(table.tableId),
+                                tableActiveOrderProvider(widget.table.tableId),
                               );
                               ref.invalidate(tableLayoutProvider);
                             },
@@ -694,6 +724,11 @@ class _TableSidebar extends ConsumerWidget {
                     ),
                   );
                 }
+
+                final readyItems = order.items
+                    .where((i) => i.status == OrderItemStatus.ready)
+                    .toList();
+                final hasReadyItems = readyItems.isNotEmpty;
 
                 return SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
@@ -738,6 +773,79 @@ class _TableSidebar extends ConsumerWidget {
                           color: paymentStatusColor(order.paymentStatus),
                         ),
                       ),
+                      if (hasReadyItems) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.orange.shade200),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.notifications_active,
+                                    size: 14,
+                                    color: Colors.orange.shade800,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Hazır ürünler (${readyItems.length})',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.orange.shade900,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              ...readyItems.map(
+                                (item) => Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 1,
+                                  ),
+                                  child: Text(
+                                    '${item.quantity}x ${item.menuItemName}',
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              SizedBox(
+                                width: double.infinity,
+                                child: FilledButton.icon(
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: Colors.orange.shade700,
+                                  ),
+                                  onPressed: _serving ? null : _serveReadyItems,
+                                  icon: _serving
+                                      ? const SizedBox(
+                                          width: 14,
+                                          height: 14,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white,
+                                          ),
+                                        )
+                                      : const Icon(
+                                          Icons.check_circle,
+                                          size: 16,
+                                        ),
+                                  label: const Text(
+                                    'Teslim Edildi',
+                                    style: TextStyle(fontSize: 13),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       const Divider(height: 20),
                       // Tüm kalemler — artık kısaltılmadan, resim ve not
                       // bilgisiyle birlikte gösteriliyor.
@@ -771,12 +879,12 @@ class _TableSidebar extends ConsumerWidget {
                               context,
                               MaterialPageRoute(
                                 builder: (_) => WaiterItemPickerScreen(
-                                  tableId: table.tableId,
+                                  tableId: widget.table.tableId,
                                 ),
                               ),
                             );
                             ref.invalidate(
-                              tableActiveOrderProvider(table.tableId),
+                              tableActiveOrderProvider(widget.table.tableId),
                             );
                             // Yeni ürün eklemek masa durumunu da
                             // etkileyebileceğinden (ör. Müsait → Dolu)
@@ -806,7 +914,9 @@ class _TableSidebar extends ConsumerWidget {
                                     ),
                                   );
                                   ref.invalidate(
-                                    tableActiveOrderProvider(table.tableId),
+                                    tableActiveOrderProvider(
+                                      widget.table.tableId,
+                                    ),
                                   );
                                   // Ödeme tamamlanınca masa boşa
                                   // düşebileceğinden (Dolu → Müsait) kat
@@ -835,7 +945,7 @@ class _TableSidebar extends ConsumerWidget {
             child: SizedBox(
               width: double.infinity,
               child: TextButton.icon(
-                onPressed: onOpenFullDetail,
+                onPressed: widget.onOpenFullDetail,
                 icon: const Icon(Icons.open_in_full, size: 16),
                 label: const Text(
                   'Tam Ekran Detay',
