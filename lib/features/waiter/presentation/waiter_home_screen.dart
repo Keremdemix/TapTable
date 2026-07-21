@@ -1,10 +1,15 @@
 import 'dart:math' as math;
 
+//import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tap_table_staff/core/constants/layout_constants.dart';
+import 'package:tap_table_staff/features/tables/data/table_models.dart';
+import 'package:tap_table_staff/features/waiter/application/ready_alert_provider.dart';
+import 'package:tap_table_staff/features/waiter/presentation/order_display.dart';
 import '../../auth/application/auth_providers.dart';
+import '../../orders/application/order_providers.dart';
 import '../../orders/data/order_models.dart';
 import '../../tables/application/table_providers.dart';
 import '../../tables/data/table_layout_models.dart';
@@ -258,6 +263,8 @@ class _WaiterHomeScreenState extends ConsumerState<WaiterHomeScreen>
   @override
   Widget build(BuildContext context) {
     final layoutAsync = ref.watch(tableLayoutProvider);
+    final flashingTableIds = ref.watch(readyAlertProvider);
+    final tableAlertStates = ref.watch(tableAlertStateProvider); // ← YENİ
 
     return Scaffold(
       appBar: AppBar(
@@ -370,6 +377,8 @@ class _WaiterHomeScreenState extends ConsumerState<WaiterHomeScreen>
                                         final isSelected =
                                             wide &&
                                             _selected?.tableId == t.tableId;
+                                        final isFlashing = flashingTableIds
+                                            .contains(t.tableId);
                                         return Positioned(
                                           left: t.positionX.toDouble(),
                                           top: t.positionY.toDouble(),
@@ -379,32 +388,42 @@ class _WaiterHomeScreenState extends ConsumerState<WaiterHomeScreen>
                                               t,
                                               wide,
                                             ),
-                                            child: AnimatedContainer(
-                                              duration: const Duration(
-                                                milliseconds: 120,
-                                              ),
-                                              decoration: BoxDecoration(
-                                                boxShadow: isSelected
-                                                    ? [
-                                                        BoxShadow(
-                                                          color: Colors.blue
-                                                              .withValues(
-                                                                alpha: 0.3,
-                                                              ),
-                                                          blurRadius: 8,
-                                                          spreadRadius: 1,
-                                                        ),
-                                                      ]
-                                                    : [],
-                                              ),
-                                              child: TableShapeWidget(
-                                                tableNumber: t.tableNumber,
-                                                capacity: t.capacity,
-                                                status: t.status,
-                                                width: t.width.toDouble(),
-                                                height: t.height.toDouble(),
-                                                shape: t.shape,
-                                                isSelected: isSelected,
+                                            child: _ReadyGlow(
+                                              isFlashing: isFlashing,
+                                              child: AnimatedContainer(
+                                                duration: const Duration(
+                                                  milliseconds: 120,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  boxShadow: isSelected
+                                                      ? [
+                                                          BoxShadow(
+                                                            color: Colors.blue
+                                                                .withValues(
+                                                                  alpha: 0.3,
+                                                                ),
+                                                            blurRadius: 8,
+                                                            spreadRadius: 1,
+                                                          ),
+                                                        ]
+                                                      : [],
+                                                ),
+                                                child: TableShapeWidget(
+                                                  tableNumber: t.tableNumber,
+                                                  capacity: t.capacity,
+                                                  status: t.status,
+                                                  width: t.width.toDouble(),
+                                                  height: t.height.toDouble(),
+                                                  shape: t.shape,
+                                                  isSelected: isSelected,
+                                                  alertState:
+                                                      tableAlertStates[t
+                                                          .tableId] ??
+                                                      TableAlertState.none,
+                                                  hasUnpaidOrder:
+                                                      t.status ==
+                                                      TableStatus.occupied,
+                                                ),
                                               ),
                                             ),
                                           ),
@@ -443,6 +462,61 @@ class _WaiterHomeScreenState extends ConsumerState<WaiterHomeScreen>
           );
         },
       ),
+    );
+  }
+}
+
+/// Mutfakta hazır olarak işaretlenmiş masaların etrafında yanıp sönen
+/// turuncu bir hâle (glow) gösterir. O masadaki tüm Ready ürünler Served
+/// olana kadar sürer (bkz. ReadyAlertNotifier).
+class _ReadyGlow extends StatefulWidget {
+  final bool isFlashing;
+  final Widget child;
+
+  const _ReadyGlow({required this.isFlashing, required this.child});
+
+  @override
+  State<_ReadyGlow> createState() => _ReadyGlowState();
+}
+
+class _ReadyGlowState extends State<_ReadyGlow>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 700),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.isFlashing) return widget.child;
+
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final t = _controller.value; // 0..1
+        final glowOpacity = 0.35 + (t * 0.45);
+        final glowBlur = 10 + (t * 14);
+        return Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.orange.withValues(alpha: glowOpacity),
+                blurRadius: glowBlur,
+                spreadRadius: 2 + (t * 3),
+              ),
+            ],
+          ),
+          child: child,
+        );
+      },
+      child: widget.child,
     );
   }
 }
@@ -541,7 +615,7 @@ class _ZoomButton extends StatelessWidget {
   }
 }
 
-class _TableSidebar extends ConsumerWidget {
+class _TableSidebar extends ConsumerStatefulWidget {
   final TableLayoutResponseDto table;
   final VoidCallback onClose;
   final VoidCallback onOpenFullDetail;
@@ -553,8 +627,37 @@ class _TableSidebar extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final orderAsync = ref.watch(tableActiveOrderProvider(table.tableId));
+  ConsumerState<_TableSidebar> createState() => _TableSidebarState();
+}
+
+class _TableSidebarState extends ConsumerState<_TableSidebar> {
+  bool _serving = false;
+
+  Future<void> _serveReadyItems() async {
+    setState(() => _serving = true);
+    try {
+      await ref
+          .read(orderRepositoryProvider)
+          .serveReadyItems(widget.table.tableId);
+      ref.invalidate(tableActiveOrderProvider(widget.table.tableId));
+      // Poll'u beklemeden masa parlamasını hemen kapat.
+      await ref.read(readyAlertProvider.notifier).refresh();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Teslim işlemi başarısız: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _serving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final orderAsync = ref.watch(
+      tableActiveOrderProvider(widget.table.tableId),
+    );
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
@@ -572,7 +675,7 @@ class _TableSidebar extends ConsumerWidget {
               children: [
                 Expanded(
                   child: Text(
-                    'Masa ${table.tableNumber}',
+                    'Masa ${widget.table.tableNumber}',
                     style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
@@ -584,7 +687,7 @@ class _TableSidebar extends ConsumerWidget {
                   icon: const Icon(Icons.close, size: 18),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
-                  onPressed: onClose,
+                  onPressed: widget.onClose,
                 ),
               ],
             ),
@@ -596,172 +699,64 @@ class _TableSidebar extends ConsumerWidget {
               error: (err, _) => Center(child: Text('Hata: $err')),
               data: (order) {
                 if (order == null) {
-                  return Padding(
+                  return ListView(
                     padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Bu masada aktif sipariş yok.',
-                          style: TextStyle(color: Colors.grey.shade600),
-                        ),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton.icon(
-                            onPressed: () async {
-                              await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => WaiterItemPickerScreen(
-                                    tableId: table.tableId,
-                                  ),
-                                ),
-                              );
-                              ref.invalidate(
-                                tableActiveOrderProvider(table.tableId),
-                              );
-                              ref.invalidate(tableLayoutProvider);
-                            },
-                            icon: const Icon(Icons.add, size: 16),
-                            label: const Text('Sipariş Oluştur'),
-                          ),
-                        ),
-                      ],
-                    ),
+                    children: [
+                      const SizedBox(height: 80),
+                      const Center(child: Text('Bu masada aktif sipariş yok.')),
+                      const SizedBox(height: 24),
+                      FilledButton.icon(
+                        onPressed: () async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => WaiterItemPickerScreen(
+                                tableId: widget.table.tableId,
+                              ),
+                            ),
+                          );
+
+                          ref.invalidate(
+                            tableActiveOrderProvider(widget.table.tableId),
+                          );
+                        },
+                        icon: const Icon(Icons.add),
+                        label: const Text('Sipariş Oluştur'),
+                      ),
+                    ],
                   );
                 }
 
-                return SingleChildScrollView(
+                return ListView(
                   padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            'Sipariş #${order.id}',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const Spacer(),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.blue.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Text(
-                              orderStatusLabel(order.status),
-                              style: const TextStyle(
-                                color: Colors.blue,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Ödeme: ${paymentStatusLabel(order.paymentStatus)}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: paymentStatusColor(order.paymentStatus),
-                        ),
-                      ),
-                      const Divider(height: 20),
-                      // En fazla ilk birkaç kalemi göster, kalanını "+N diğer" ile özetle.
-                      ...order.items
-                          .take(5)
-                          .map(
-                            (item) => Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 3),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      '${item.quantity}x ${item.menuItemName}',
-                                      style: const TextStyle(fontSize: 12),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  Text(
-                                    '₺${item.lineTotal.toStringAsFixed(2)}',
-                                    style: const TextStyle(fontSize: 12),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                      if (order.items.length > 5)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(
-                            '+${order.items.length - 5} diğer ürün',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey.shade500,
-                            ),
-                          ),
-                        ),
-                      const Divider(height: 20),
-                      Row(
-                        children: [
-                          const Text(
-                            'Toplam',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                            ),
-                          ),
-                          const Spacer(),
-                          Text(
-                            '₺${order.totalPrice.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.icon(
+                  children: [
+                    ActiveOrderContent(
+                      order: order,
+                      serving: _serving,
+                      onServeReadyItems: _serveReadyItems,
+                      actions: [
+                        FilledButton.icon(
                           onPressed: () async {
                             await Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (_) => WaiterItemPickerScreen(
-                                  tableId: table.tableId,
+                                  tableId: widget.table.tableId,
                                 ),
                               ),
                             );
+
                             ref.invalidate(
-                              tableActiveOrderProvider(table.tableId),
+                              tableActiveOrderProvider(widget.table.tableId),
                             );
-                            // Yeni ürün eklemek masa durumunu da
-                            // etkileyebileceğinden (ör. Müsait → Dolu)
-                            // kat planı da tazelenir.
-                            ref.invalidate(tableLayoutProvider);
                           },
-                          icon: const Icon(Icons.add, size: 16),
-                          label: const Text(
-                            'Ürün Ekle',
-                            style: TextStyle(fontSize: 13),
-                          ),
+                          icon: const Icon(Icons.add),
+                          label: const Text('Ürün Ekle'),
                         ),
-                      ),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
+
+                        const SizedBox(height: 8),
+
+                        OutlinedButton.icon(
                           onPressed:
                               order.paymentStatus == OrderPaymentStatus.paid
                               ? null
@@ -773,26 +768,25 @@ class _TableSidebar extends ConsumerWidget {
                                           WaiterPaymentScreen(order: order),
                                     ),
                                   );
+
                                   ref.invalidate(
-                                    tableActiveOrderProvider(table.tableId),
+                                    tableActiveOrderProvider(
+                                      widget.table.tableId,
+                                    ),
                                   );
-                                  // Ödeme tamamlanınca masa boşa
-                                  // düşebileceğinden (Dolu → Müsait) kat
-                                  // planı rengi anında güncellensin diye
-                                  // burada da tazeliyoruz.
+
                                   ref.invalidate(tableLayoutProvider);
                                 },
-                          icon: const Icon(Icons.payments, size: 16),
+                          icon: const Icon(Icons.payments),
                           label: Text(
                             order.paymentStatus == OrderPaymentStatus.paid
                                 ? 'Ödendi'
                                 : 'Ödeme Al',
-                            style: const TextStyle(fontSize: 13),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
+                  ],
                 );
               },
             ),
@@ -803,7 +797,7 @@ class _TableSidebar extends ConsumerWidget {
             child: SizedBox(
               width: double.infinity,
               child: TextButton.icon(
-                onPressed: onOpenFullDetail,
+                onPressed: widget.onOpenFullDetail,
                 icon: const Icon(Icons.open_in_full, size: 16),
                 label: const Text(
                   'Tam Ekran Detay',

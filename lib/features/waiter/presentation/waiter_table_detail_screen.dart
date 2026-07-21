@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tap_table_staff/features/tables/application/table_providers.dart';
+import 'package:tap_table_staff/features/waiter/presentation/order_display.dart';
 import '../../orders/application/order_providers.dart';
 import '../../orders/data/order_models.dart';
+import '../application/ready_alert_provider.dart';
 import 'waiter_item_picker_screen.dart';
 import 'waiter_payment_screen.dart';
 
@@ -20,28 +22,7 @@ final tableActiveOrderProvider = FutureProvider.autoDispose
       return null;
     });
 
-String orderStatusLabel(OrderStatus status) => switch (status) {
-  OrderStatus.pending => 'Bekliyor',
-  OrderStatus.preparing => 'Hazırlanıyor',
-  OrderStatus.ready => 'Hazır',
-  OrderStatus.served => 'Servis Edildi',
-  OrderStatus.completed => 'Tamamlandı',
-  OrderStatus.cancelled => 'İptal',
-};
-
-String paymentStatusLabel(OrderPaymentStatus status) => switch (status) {
-  OrderPaymentStatus.unpaid => 'Ödenmedi',
-  OrderPaymentStatus.partiallyPaid => 'Kısmi Ödendi',
-  OrderPaymentStatus.paid => 'Ödendi',
-};
-
-Color paymentStatusColor(OrderPaymentStatus status) => switch (status) {
-  OrderPaymentStatus.unpaid => Colors.red,
-  OrderPaymentStatus.partiallyPaid => Colors.orange,
-  OrderPaymentStatus.paid => Colors.green,
-};
-
-class WaiterTableDetailScreen extends ConsumerWidget {
+class WaiterTableDetailScreen extends ConsumerStatefulWidget {
   final int tableId;
   final int tableNumber;
   const WaiterTableDetailScreen({
@@ -51,13 +32,40 @@ class WaiterTableDetailScreen extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final orderAsync = ref.watch(tableActiveOrderProvider(tableId));
+  ConsumerState<WaiterTableDetailScreen> createState() =>
+      _WaiterTableDetailScreenState();
+}
+
+class _WaiterTableDetailScreenState
+    extends ConsumerState<WaiterTableDetailScreen> {
+  bool _serving = false;
+
+  Future<void> _serveReadyItems() async {
+    setState(() => _serving = true);
+    try {
+      await ref.read(orderRepositoryProvider).serveReadyItems(widget.tableId);
+      ref.invalidate(tableActiveOrderProvider(widget.tableId));
+      // Poll'u beklemeden masa parlamasını hemen kapat.
+      await ref.read(readyAlertProvider.notifier).refresh();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Teslim işlemi başarısız: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _serving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final orderAsync = ref.watch(tableActiveOrderProvider(widget.tableId));
     return Scaffold(
-      appBar: AppBar(title: Text('Masa $tableNumber')),
+      appBar: AppBar(title: Text('Masa ${widget.tableNumber}')),
       body: RefreshIndicator(
         onRefresh: () async =>
-            ref.invalidate(tableActiveOrderProvider(tableId)),
+            ref.invalidate(tableActiveOrderProvider(widget.tableId)),
         child: orderAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (err, _) => Center(child: Text('Hata: $err')),
@@ -69,16 +77,18 @@ class WaiterTableDetailScreen extends ConsumerWidget {
                   const SizedBox(height: 80),
                   const Center(child: Text('Bu masada aktif sipariş yok.')),
                   const SizedBox(height: 24),
+
                   FilledButton.icon(
                     onPressed: () async {
                       await Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (_) =>
-                              WaiterItemPickerScreen(tableId: tableId),
+                              WaiterItemPickerScreen(tableId: widget.tableId),
                         ),
                       );
-                      ref.invalidate(tableActiveOrderProvider(tableId));
+
+                      ref.invalidate(tableActiveOrderProvider(widget.tableId));
                     },
                     icon: const Icon(Icons.add),
                     label: const Text('Sipariş Oluştur'),
@@ -86,120 +96,60 @@ class WaiterTableDetailScreen extends ConsumerWidget {
                 ],
               );
             }
-
             return ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                Row(
-                  children: [
-                    Text(
-                      'Sipariş #${order.id}',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
+                ActiveOrderContent(
+                  order: order,
+                  serving: _serving,
+                  onServeReadyItems: _serveReadyItems,
+                  actions: [
+                    FilledButton.icon(
+                      onPressed: () async {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                WaiterItemPickerScreen(tableId: widget.tableId),
+                          ),
+                        );
+
+                        ref.invalidate(
+                          tableActiveOrderProvider(widget.tableId),
+                        );
+                      },
+                      icon: const Icon(Icons.add),
+                      label: const Text('Ürün Ekle'),
                     ),
-                    const Spacer(),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        orderStatusLabel(order.status),
-                        style: const TextStyle(
-                          color: Colors.blue,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
+
+                    const SizedBox(height: 8),
+
+                    OutlinedButton.icon(
+                      onPressed: order.paymentStatus == OrderPaymentStatus.paid
+                          ? null
+                          : () async {
+                              await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      WaiterPaymentScreen(order: order),
+                                ),
+                              );
+
+                              ref.invalidate(
+                                tableActiveOrderProvider(widget.tableId),
+                              );
+
+                              ref.invalidate(tableLayoutProvider);
+                            },
+                      icon: const Icon(Icons.payments),
+                      label: Text(
+                        order.paymentStatus == OrderPaymentStatus.paid
+                            ? 'Ödendi'
+                            : 'Ödeme Al',
                       ),
                     ),
                   ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Ödeme: ${paymentStatusLabel(order.paymentStatus)}',
-                  style: TextStyle(
-                    color: paymentStatusColor(order.paymentStatus),
-                  ),
-                ),
-                const Divider(height: 24),
-                ...order.items.map(
-                  (item) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text('${item.quantity}x ${item.menuItemName}'),
-                        ),
-                        Text('₺${item.lineTotal.toStringAsFixed(2)}'),
-                      ],
-                    ),
-                  ),
-                ),
-                const Divider(height: 24),
-                Row(
-                  children: [
-                    const Text(
-                      'Toplam',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      '₺${order.totalPrice.toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                FilledButton.icon(
-                  onPressed: () async {
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            WaiterItemPickerScreen(tableId: tableId),
-                      ),
-                    );
-                    ref.invalidate(tableActiveOrderProvider(tableId));
-                  },
-                  icon: const Icon(Icons.add),
-                  label: const Text('Ürün Ekle'),
-                ),
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: order.paymentStatus == OrderPaymentStatus.paid
-                      ? null
-                      : () async {
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => WaiterPaymentScreen(order: order),
-                            ),
-                          );
-
-                          // Aktif siparişi yenile
-                          ref.invalidate(tableActiveOrderProvider(tableId));
-
-                          // Masa renklerini de yenile
-                          ref.invalidate(tableLayoutProvider);
-                        },
-                  icon: const Icon(Icons.payments),
-                  label: Text(
-                    order.paymentStatus == OrderPaymentStatus.paid
-                        ? 'Ödendi'
-                        : 'Ödeme Al',
-                  ),
                 ),
               ],
             );
