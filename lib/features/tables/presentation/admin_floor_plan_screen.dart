@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:tap_table_staff/features/waiter/application/ready_alert_provider.dart';
 import '../application/table_providers.dart';
 import '../data/table_layout_models.dart';
 import '../data/table_models.dart';
@@ -692,6 +693,7 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen>
   Widget build(BuildContext context) {
     final layoutAsync = ref.watch(tableLayoutProvider);
     final tablesAsync = ref.watch(tablesProvider);
+    ref.watch(tableAlertStateProvider);
 
     return Scaffold(
       // Sidebar/özet panel de beyaz; canvas'ın bittiği yerde renk farkı
@@ -931,6 +933,8 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen>
   Widget _buildTableWidget(TableLayoutResponseDto t, bool wide) {
     final isSelected = _selectedTableId == t.tableId;
     final isDraggingThis = _drag?.tableId == t.tableId;
+    final alertState =
+        ref.watch(tableAlertStateProvider)[t.tableId] ?? TableAlertState.none;
 
     return Positioned(
       left: t.positionX.toDouble(),
@@ -1003,6 +1007,7 @@ class _AdminFloorPlanScreenState extends ConsumerState<AdminFloorPlanScreen>
             height: t.height.toDouble(),
             shape: t.shape,
             isSelected: isSelected,
+            alertState: alertState,
           ),
         ),
       ),

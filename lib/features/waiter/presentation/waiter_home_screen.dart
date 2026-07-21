@@ -1,11 +1,13 @@
 import 'dart:math' as math;
 
-import 'package:cached_network_image/cached_network_image.dart';
+//import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tap_table_staff/core/constants/layout_constants.dart';
+import 'package:tap_table_staff/features/tables/data/table_models.dart';
 import 'package:tap_table_staff/features/waiter/application/ready_alert_provider.dart';
+import 'package:tap_table_staff/features/waiter/presentation/order_display.dart';
 import '../../auth/application/auth_providers.dart';
 import '../../orders/application/order_providers.dart';
 import '../../orders/data/order_models.dart';
@@ -262,6 +264,7 @@ class _WaiterHomeScreenState extends ConsumerState<WaiterHomeScreen>
   Widget build(BuildContext context) {
     final layoutAsync = ref.watch(tableLayoutProvider);
     final flashingTableIds = ref.watch(readyAlertProvider);
+    final tableAlertStates = ref.watch(tableAlertStateProvider); // ← YENİ
 
     return Scaffold(
       appBar: AppBar(
@@ -413,6 +416,13 @@ class _WaiterHomeScreenState extends ConsumerState<WaiterHomeScreen>
                                                   height: t.height.toDouble(),
                                                   shape: t.shape,
                                                   isSelected: isSelected,
+                                                  alertState:
+                                                      tableAlertStates[t
+                                                          .tableId] ??
+                                                      TableAlertState.none,
+                                                  hasUnpaidOrder:
+                                                      t.status ==
+                                                      TableStatus.occupied,
                                                 ),
                                               ),
                                             ),
@@ -689,191 +699,43 @@ class _TableSidebarState extends ConsumerState<_TableSidebar> {
               error: (err, _) => Center(child: Text('Hata: $err')),
               data: (order) {
                 if (order == null) {
-                  return Padding(
+                  return ListView(
                     padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Bu masada aktif sipariş yok.',
-                          style: TextStyle(color: Colors.grey.shade600),
-                        ),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton.icon(
-                            onPressed: () async {
-                              await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => WaiterItemPickerScreen(
-                                    tableId: widget.table.tableId,
-                                  ),
-                                ),
-                              );
-                              ref.invalidate(
-                                tableActiveOrderProvider(widget.table.tableId),
-                              );
-                              ref.invalidate(tableLayoutProvider);
-                            },
-                            icon: const Icon(Icons.add, size: 16),
-                            label: const Text('Sipariş Oluştur'),
-                          ),
-                        ),
-                      ],
-                    ),
+                    children: [
+                      const SizedBox(height: 80),
+                      const Center(child: Text('Bu masada aktif sipariş yok.')),
+                      const SizedBox(height: 24),
+                      FilledButton.icon(
+                        onPressed: () async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => WaiterItemPickerScreen(
+                                tableId: widget.table.tableId,
+                              ),
+                            ),
+                          );
+
+                          ref.invalidate(
+                            tableActiveOrderProvider(widget.table.tableId),
+                          );
+                        },
+                        icon: const Icon(Icons.add),
+                        label: const Text('Sipariş Oluştur'),
+                      ),
+                    ],
                   );
                 }
 
-                final readyItems = order.items
-                    .where((i) => i.status == OrderItemStatus.ready)
-                    .toList();
-                final hasReadyItems = readyItems.isNotEmpty;
-
-                return SingleChildScrollView(
+                return ListView(
                   padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            'Sipariş #${order.id}',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const Spacer(),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.blue.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Text(
-                              orderStatusLabel(order.status),
-                              style: const TextStyle(
-                                color: Colors.blue,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Ödeme: ${paymentStatusLabel(order.paymentStatus)}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: paymentStatusColor(order.paymentStatus),
-                        ),
-                      ),
-                      if (hasReadyItems) ...[
-                        const SizedBox(height: 12),
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: Colors.orange.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: Colors.orange.shade200),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Icon(
-                                    Icons.notifications_active,
-                                    size: 14,
-                                    color: Colors.orange.shade800,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    'Hazır ürünler (${readyItems.length})',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.orange.shade900,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 6),
-                              ...readyItems.map(
-                                (item) => Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 1,
-                                  ),
-                                  child: Text(
-                                    '${item.quantity}x ${item.menuItemName}',
-                                    style: const TextStyle(fontSize: 12),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              SizedBox(
-                                width: double.infinity,
-                                child: FilledButton.icon(
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: Colors.orange.shade700,
-                                  ),
-                                  onPressed: _serving ? null : _serveReadyItems,
-                                  icon: _serving
-                                      ? const SizedBox(
-                                          width: 14,
-                                          height: 14,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            color: Colors.white,
-                                          ),
-                                        )
-                                      : const Icon(
-                                          Icons.check_circle,
-                                          size: 16,
-                                        ),
-                                  label: const Text(
-                                    'Teslim Edildi',
-                                    style: TextStyle(fontSize: 13),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                      const Divider(height: 20),
-                      // Tüm kalemler — artık kısaltılmadan, resim ve not
-                      // bilgisiyle birlikte gösteriliyor.
-                      ...order.items.map((item) => _OrderItemTile(item: item)),
-                      const Divider(height: 20),
-                      Row(
-                        children: [
-                          const Text(
-                            'Toplam',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                            ),
-                          ),
-                          const Spacer(),
-                          Text(
-                            '₺${order.totalPrice.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.icon(
+                  children: [
+                    ActiveOrderContent(
+                      order: order,
+                      serving: _serving,
+                      onServeReadyItems: _serveReadyItems,
+                      actions: [
+                        FilledButton.icon(
                           onPressed: () async {
                             await Navigator.push(
                               context,
@@ -883,25 +745,18 @@ class _TableSidebarState extends ConsumerState<_TableSidebar> {
                                 ),
                               ),
                             );
+
                             ref.invalidate(
                               tableActiveOrderProvider(widget.table.tableId),
                             );
-                            // Yeni ürün eklemek masa durumunu da
-                            // etkileyebileceğinden (ör. Müsait → Dolu)
-                            // kat planı da tazelenir.
-                            ref.invalidate(tableLayoutProvider);
                           },
-                          icon: const Icon(Icons.add, size: 16),
-                          label: const Text(
-                            'Ürün Ekle',
-                            style: TextStyle(fontSize: 13),
-                          ),
+                          icon: const Icon(Icons.add),
+                          label: const Text('Ürün Ekle'),
                         ),
-                      ),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
+
+                        const SizedBox(height: 8),
+
+                        OutlinedButton.icon(
                           onPressed:
                               order.paymentStatus == OrderPaymentStatus.paid
                               ? null
@@ -913,28 +768,25 @@ class _TableSidebarState extends ConsumerState<_TableSidebar> {
                                           WaiterPaymentScreen(order: order),
                                     ),
                                   );
+
                                   ref.invalidate(
                                     tableActiveOrderProvider(
                                       widget.table.tableId,
                                     ),
                                   );
-                                  // Ödeme tamamlanınca masa boşa
-                                  // düşebileceğinden (Dolu → Müsait) kat
-                                  // planı rengi anında güncellensin diye
-                                  // burada da tazeliyoruz.
+
                                   ref.invalidate(tableLayoutProvider);
                                 },
-                          icon: const Icon(Icons.payments, size: 16),
+                          icon: const Icon(Icons.payments),
                           label: Text(
                             order.paymentStatus == OrderPaymentStatus.paid
                                 ? 'Ödendi'
                                 : 'Ödeme Al',
-                            style: const TextStyle(fontSize: 13),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
+                  ],
                 );
               },
             ),
@@ -952,121 +804,6 @@ class _TableSidebarState extends ConsumerState<_TableSidebar> {
                   style: TextStyle(fontSize: 13),
                 ),
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Sidebar'daki tek bir sipariş kalemi — küçük ürün resmi, adet, ad,
-/// tutar ve varsa müşteri notu.
-class _OrderItemTile extends StatelessWidget {
-  final OrderItemResponseDto item;
-
-  const _OrderItemTile({required this.item});
-
-  @override
-  Widget build(BuildContext context) {
-    final hasImage =
-        item.menuItemImageUrl != null && item.menuItemImageUrl!.isNotEmpty;
-    final hasNote = item.note != null && item.note!.isNotEmpty;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: hasImage
-                ? CachedNetworkImage(
-                    imageUrl: item.menuItemImageUrl!,
-                    width: 40,
-                    height: 40,
-                    fit: BoxFit.cover,
-                    placeholder: (_, __) => Container(
-                      width: 40,
-                      height: 40,
-                      color: Colors.grey.shade200,
-                    ),
-                    errorWidget: (_, __, ___) => Container(
-                      width: 40,
-                      height: 40,
-                      color: Colors.grey.shade200,
-                      child: const Icon(
-                        Icons.fastfood,
-                        size: 18,
-                        color: Colors.grey,
-                      ),
-                    ),
-                  )
-                : Container(
-                    width: 40,
-                    height: 40,
-                    color: Colors.grey.shade200,
-                    child: const Icon(
-                      Icons.fastfood,
-                      size: 18,
-                      color: Colors.grey,
-                    ),
-                  ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        '${item.quantity}x ${item.menuItemName}',
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                    ),
-                    Text(
-                      '₺${item.lineTotal.toStringAsFixed(2)}',
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                  ],
-                ),
-                if (hasNote) ...[
-                  const SizedBox(height: 3),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.amber.shade50,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: Colors.amber.shade200),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.sticky_note_2,
-                          size: 12,
-                          color: Colors.amber.shade800,
-                        ),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            item.note!,
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.amber.shade900,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
             ),
           ),
         ],
