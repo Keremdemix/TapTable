@@ -5,15 +5,17 @@ import '../../../core/network/api_exception.dart';
 import '../../menu/application/menu_providers.dart';
 import '../../orders/application/order_providers.dart';
 import '../../orders/data/order_models.dart';
+import 'order_display.dart';
 import 'waiter_table_detail_screen.dart' show tableActiveOrderProvider;
 
-/// Sepete eklenen bir ürünü (referans + adet) birlikte tutar.
+/// Sepete eklenen bir ürünü (referans + adet + not) birlikte tutar.
 /// Böylece alt özet barında fiyat hesaplamak için menü listesine
 /// tekrar ihtiyaç duymayız.
 class _CartLine {
   final dynamic item;
   int quantity;
-  _CartLine(this.item, this.quantity);
+  String? note;
+  _CartLine(this.item, this.quantity, {this.note});
 }
 
 class WaiterItemPickerScreen extends ConsumerStatefulWidget {
@@ -42,7 +44,53 @@ class _WaiterItemPickerScreenState
       if (nextQty == 0) {
         _cart.remove(id);
       } else {
-        _cart[id] = _CartLine(item, nextQty);
+        // Adet değişse bile daha önce girilmiş notu koru.
+        _cart[id] = _CartLine(item, nextQty, note: current?.note);
+      }
+    });
+  }
+
+  /// [item] için not ekleme/düzenleme diyaloğunu açar. Ürün sepette
+  /// olmalı (quantity > 0), aksi halde bağlanacağı bir satır yoktur.
+  Future<void> _editNote(dynamic item) async {
+    final id = item.id as int;
+    final line = _cart[id];
+    if (line == null) return;
+
+    final controller = TextEditingController(text: line.note ?? '');
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('${item.name} için not'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 3,
+          decoration: const InputDecoration(
+            hintText: 'Örn: Acısız olsun, az pişmiş, sosu ayrı...',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Vazgeç'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Kaydet'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == null) return; // Vazgeçildi, mevcut notu değiştirme
+
+    setState(() {
+      final current = _cart[id];
+      if (current != null) {
+        current.note = result.isEmpty ? null : result;
       }
     });
   }
@@ -62,8 +110,11 @@ class _WaiterItemPickerScreenState
     try {
       final items = _cart.entries
           .map(
-            (e) =>
-                OrderItemInput(menuItemId: e.key, quantity: e.value.quantity),
+            (e) => OrderItemInput(
+              menuItemId: e.key,
+              quantity: e.value.quantity,
+              note: e.value.note,
+            ),
           )
           .toList();
 
@@ -102,6 +153,12 @@ class _WaiterItemPickerScreenState
     final List<OrderItemResponseDto> previousItems =
         previousOrder?.items ?? const [];
     final hasPreviousOrder = previousItems.isNotEmpty;
+
+    // Görüntüleme için: notu olmayanlar ürün+durum bazında birleştirilip
+    // adet gösterilir (ör. "3x Kola"), notu olanlar kendi satırında ayrı
+    // kalır. Diğer ekranlarla birebir aynı mantık — order_display.dart.
+    final List<DisplayOrderItem> displayPreviousItems =
+        groupOrderItemsForDisplay(previousItems);
 
     final double previousOrderTotal = hasPreviousOrder
         ? previousItems.fold<double>(0, (sum, i) => sum + i.lineTotal)
@@ -163,7 +220,7 @@ class _WaiterItemPickerScreenState
           // ── Masanın mevcut siparişi (varsa) ─────────────────────
           if (hasPreviousOrder)
             _PreviousOrderCard(
-              items: previousItems,
+              items: displayPreviousItems,
               itemCount: previousItemCount,
               total: previousOrderTotal,
               expanded: _previousOrderExpanded,
@@ -237,14 +294,17 @@ class _WaiterItemPickerScreenState
                   itemCount: filtered.length,
                   itemBuilder: (context, index) {
                     final item = filtered[index];
-                    final qty = _cart[item.id]?.quantity ?? 0;
+                    final line = _cart[item.id];
+                    final qty = line?.quantity ?? 0;
 
                     return _MenuItemPickerCard(
                       item: item,
                       quantity: qty,
+                      note: line?.note,
                       accent: accent,
                       onAdd: () => _changeQty(item, 1),
                       onRemove: () => _changeQty(item, -1),
+                      onEditNote: () => _editNote(item),
                     );
                   },
                 );
@@ -291,6 +351,7 @@ class _WaiterItemPickerScreenState
                             primary: primary,
                             onAdd: () => _changeQty(line.item, 1),
                             onRemove: () => _changeQty(line.item, -1),
+                            onEditNote: () => _editNote(line.item),
                           );
                         },
                       ),
@@ -393,8 +454,11 @@ class _WaiterItemPickerScreenState
 
 /// Masanın önceden verilmiş/onaylanmış siparişini gösteren, tıklanınca
 /// açılıp kapanan bilgi kartı. Salt okunur - burada miktar değiştirilemez.
+/// [items] zaten gruplanmış olarak gelir (bkz. groupOrderItemsForDisplay,
+/// order_display.dart). Satırlar diğer ekranlarla aynı OrderItemRow ile
+/// render edilir — böylece resim/not/durum rozeti hepsinde tutarlı.
 class _PreviousOrderCard extends StatelessWidget {
-  final List<OrderItemResponseDto> items;
+  final List<DisplayOrderItem> items;
   final int itemCount;
   final double total;
   final bool expanded;
@@ -467,15 +531,14 @@ class _PreviousOrderCard extends StatelessWidget {
           if (expanded)
             ConstrainedBox(
               constraints: const BoxConstraints(maxHeight: 220),
-              child: ListView.separated(
+              child: ListView.builder(
                 shrinkWrap: true,
                 physics: const ClampingScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                 itemCount: items.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 8),
                 itemBuilder: (context, index) {
                   final item = items[index];
-                  return _PreviousOrderRow(
+                  return OrderItemRow(
                     item: item,
                     primary: primary,
                     accent: accent,
@@ -484,77 +547,6 @@ class _PreviousOrderCard extends StatelessWidget {
               ),
             ),
           Divider(height: 1, color: Colors.grey.shade200),
-        ],
-      ),
-    );
-  }
-}
-
-class _PreviousOrderRow extends StatelessWidget {
-  final OrderItemResponseDto item;
-  final Color primary;
-  final Color accent;
-
-  const _PreviousOrderRow({
-    required this.item,
-    required this.primary,
-    required this.accent,
-  });
-
-  ({Color color, String label}) get _statusMeta => switch (item.status) {
-    OrderItemStatus.pending => (color: primary, label: 'Onaylandı'),
-    OrderItemStatus.preparing => (color: Colors.orange, label: 'Hazırlanıyor'),
-    OrderItemStatus.ready => (color: accent, label: 'Hazır'),
-    OrderItemStatus.served => (color: primary, label: 'Servis Edildi'),
-    OrderItemStatus.cancelled => (color: Colors.red, label: 'İptal Edildi'),
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    final meta = _statusMeta;
-
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.menuItemName,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  '${item.quantity} Adet · ₺${item.lineTotal.toStringAsFixed(2)}',
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: meta.color.withOpacity(.12),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              meta.label,
-              style: TextStyle(
-                color: meta.color,
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -606,20 +598,24 @@ class _CategoryChip extends StatelessWidget {
 }
 
 /// MenuScreen'deki _MenuItemCard ile aynı düzen: resim + isim + açıklama +
-/// fiyat rozeti + ekle/adet stepper.
+/// fiyat rozeti + ekle/adet stepper + (sepetteyse) not ekleme satırı.
 class _MenuItemPickerCard extends StatelessWidget {
   final dynamic item;
   final int quantity;
+  final String? note;
   final Color accent;
   final VoidCallback onAdd;
   final VoidCallback onRemove;
+  final VoidCallback onEditNote;
 
   const _MenuItemPickerCard({
     required this.item,
     required this.quantity,
+    required this.note,
     required this.accent,
     required this.onAdd,
     required this.onRemove,
+    required this.onEditNote,
   });
 
   @override
@@ -627,6 +623,7 @@ class _MenuItemPickerCard extends StatelessWidget {
     final String? imageUrl = item.imageUrl as String?;
     final String? description = item.description as String?;
     final hasImage = imageUrl != null && imageUrl.isNotEmpty;
+    final hasNote = note != null && note!.isNotEmpty;
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 6),
@@ -740,6 +737,60 @@ class _MenuItemPickerCard extends StatelessWidget {
                     ),
                   ],
                 ),
+                // Sepete eklenmiş bir ürün için not ekleme/düzenleme satırı.
+                if (quantity > 0) ...[
+                  const SizedBox(height: 8),
+                  InkWell(
+                    onTap: onEditNote,
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: hasNote
+                            ? Colors.amber.shade50
+                            : Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: hasNote
+                              ? Colors.amber.shade200
+                              : Colors.grey.shade200,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            hasNote
+                                ? Icons.sticky_note_2
+                                : Icons.note_add_outlined,
+                            size: 14,
+                            color: hasNote
+                                ? Colors.amber.shade800
+                                : Colors.grey.shade600,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              hasNote ? note! : 'Not ekle',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: hasNote
+                                    ? Colors.amber.shade900
+                                    : Colors.grey.shade600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -811,24 +862,29 @@ class _StepperButton extends StatelessWidget {
   }
 }
 
-/// Alt bardaki yatay kaydırılabilir küçük ürün kartı.
+/// Alt bardaki yatay kaydırılabilir küçük ürün kartı. Not eklenmişse
+/// sol üstte küçük bir not rozeti gösterir; rozete veya karta dokununca
+/// not diyaloğu açılır.
 class _CartItemThumb extends StatelessWidget {
   final _CartLine line;
   final Color primary;
   final VoidCallback onAdd;
   final VoidCallback onRemove;
+  final VoidCallback onEditNote;
 
   const _CartItemThumb({
     required this.line,
     required this.primary,
     required this.onAdd,
     required this.onRemove,
+    required this.onEditNote,
   });
 
   @override
   Widget build(BuildContext context) {
     final String? imageUrl = line.item.imageUrl as String?;
     final hasImage = imageUrl != null && imageUrl.isNotEmpty;
+    final hasNote = line.note != null && line.note!.isNotEmpty;
 
     return SizedBox(
       width: 72,
@@ -838,20 +894,34 @@ class _CartItemThumb extends StatelessWidget {
           Stack(
             clipBehavior: Clip.none,
             children: [
-              ClipRRect(
+              InkWell(
                 borderRadius: BorderRadius.circular(10),
-                child: hasImage
-                    ? CachedNetworkImage(
-                        imageUrl: imageUrl,
-                        width: 52,
-                        height: 52,
-                        fit: BoxFit.cover,
-                        placeholder: (_, __) => Container(
+                onTap: onEditNote,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: hasImage
+                      ? CachedNetworkImage(
+                          imageUrl: imageUrl,
                           width: 52,
                           height: 52,
-                          color: Colors.grey.shade200,
-                        ),
-                        errorWidget: (_, __, ___) => Container(
+                          fit: BoxFit.cover,
+                          placeholder: (_, __) => Container(
+                            width: 52,
+                            height: 52,
+                            color: Colors.grey.shade200,
+                          ),
+                          errorWidget: (_, __, ___) => Container(
+                            width: 52,
+                            height: 52,
+                            color: Colors.grey.shade200,
+                            child: const Icon(
+                              Icons.fastfood,
+                              size: 22,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        )
+                      : Container(
                           width: 52,
                           height: 52,
                           color: Colors.grey.shade200,
@@ -861,17 +931,7 @@ class _CartItemThumb extends StatelessWidget {
                             color: Colors.grey,
                           ),
                         ),
-                      )
-                    : Container(
-                        width: 52,
-                        height: 52,
-                        color: Colors.grey.shade200,
-                        child: const Icon(
-                          Icons.fastfood,
-                          size: 22,
-                          color: Colors.grey,
-                        ),
-                      ),
+                ),
               ),
               if (line.quantity > 1)
                 Positioned(
@@ -896,6 +956,24 @@ class _CartItemThumb extends StatelessWidget {
                         fontSize: 9,
                         fontWeight: FontWeight.w700,
                       ),
+                    ),
+                  ),
+                ),
+              if (hasNote)
+                Positioned(
+                  left: -4,
+                  top: -4,
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade700,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 1.5),
+                    ),
+                    child: const Icon(
+                      Icons.sticky_note_2,
+                      size: 9,
+                      color: Colors.white,
                     ),
                   ),
                 ),

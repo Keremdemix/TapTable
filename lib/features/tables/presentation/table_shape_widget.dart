@@ -1,7 +1,10 @@
 import 'dart:math';
+
 import 'package:flutter/material.dart';
-import '../data/table_models.dart';
 import 'package:tap_table_staff/core/constants/layout_constants.dart';
+import 'package:tap_table_staff/features/waiter/application/ready_alert_provider.dart';
+
+import '../data/table_models.dart';
 
 class TableShapeWidget extends StatelessWidget {
   final int tableNumber;
@@ -11,7 +14,13 @@ class TableShapeWidget extends StatelessWidget {
   final double height;
   final String shape; // 'rectangle' | 'circle'
   final bool isSelected;
-  
+  final TableAlertState alertState;
+
+  /// Masanın aktif ve ödenmemiş siparişi var mı?
+  final bool hasUnpaidOrder;
+
+  /// Masada henüz teslim edilmemiş ürün var mı?
+  final bool hasUndeliveredOrder;
 
   const TableShapeWidget({
     super.key,
@@ -22,33 +31,52 @@ class TableShapeWidget extends StatelessWidget {
     required this.height,
     required this.shape,
     this.isSelected = false,
+    this.alertState = TableAlertState.none,
+    this.hasUnpaidOrder = false,
+    this.hasUndeliveredOrder = false,
   });
 
-  Color get _statusColor => switch (status) {
-        TableStatus.available => Colors.green,
-        TableStatus.occupied => Colors.orange,
-        TableStatus.reserved => Colors.blue,
-        TableStatus.outOfService => Colors.grey,
-      };
+  Color get _statusColor {
+    // Ödenmiş ama henüz teslim edilmemiş ürün varsa kırmızı
+    if (alertState == TableAlertState.paidNotServed) {
+      return Colors.red;
+    }
+
+    // Ödenmemiş hesap varsa masa kesinlikle boş değildir
+    if (hasUnpaidOrder) {
+      return Colors.orange;
+    }
+
+    // Teslim edilmemiş ürün varsa
+    if (hasUndeliveredOrder) {
+      return Colors.orange;
+    }
+
+    // Hiçbir aktif durum yoksa
+    return switch (status) {
+      TableStatus.available => Colors.green,
+      TableStatus.occupied => Colors.orange,
+      TableStatus.reserved => Colors.blue,
+      TableStatus.outOfService => Colors.grey,
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-    width: width,
-    height: height,
+      width: width,
+      height: height,
       child: Stack(
         alignment: Alignment.center,
         clipBehavior: Clip.none,
-        children: [
-          ..._buildChairs(),
-          _buildTabletop(),
-        ],
+        children: [..._buildChairs(), _buildTabletop()],
       ),
     );
   }
 
   Widget _buildTabletop() {
     final isCircle = shape == 'circle';
+
     return Container(
       width: width,
       height: height,
@@ -58,15 +86,25 @@ class TableShapeWidget extends StatelessWidget {
         borderRadius: isCircle ? null : BorderRadius.circular(10),
         shape: isCircle ? BoxShape.circle : BoxShape.rectangle,
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 4, offset: const Offset(0, 2)),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('$tableNumber', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            Text('$capacity kişi', style: const TextStyle(fontSize: 10, color: Colors.black54)),
+            Text(
+              '$tableNumber',
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            Text(
+              '$capacity kişi',
+              style: const TextStyle(fontSize: 10, color: Colors.black54),
+            ),
           ],
         ),
       ),
@@ -75,51 +113,68 @@ class TableShapeWidget extends StatelessWidget {
 
   List<Widget> _buildChairs() {
     final chairs = <Widget>[];
+
     final chairSize = LayoutConstants.chairSize;
-    final centerX = (width) / 2;
-    final centerY = (height) / 2;
+    final centerX = width / 2;
+    final centerY = height / 2;
 
     if (shape == 'circle') {
       final radius = (width / 2) + 14;
+
       for (var i = 0; i < capacity; i++) {
         final angle = (2 * pi * i) / capacity;
-        chairs.add(Positioned(
-          left: centerX + radius * cos(angle) - chairSize / 2,
-          top: centerY + radius * sin(angle) - chairSize / 2,
-          child: _chair(),
-        ));
+
+        chairs.add(
+          Positioned(
+            left: centerX + radius * cos(angle) - chairSize / 2,
+            top: centerY + radius * sin(angle) - chairSize / 2,
+            child: _chair(),
+          ),
+        );
       }
     } else {
       final topCount = (capacity / 2).ceil();
       final bottomCount = capacity - topCount;
 
+      // Üst sandalyeler
       for (var i = 0; i < topCount; i++) {
         final spacing = width / (topCount + 1);
-        chairs.add(Positioned(
-          left: spacing * (i + 1) - chairSize / 2,
-          top: -10 -chairSize / 2,
-          child: _chair(),
-        ));
+
+        chairs.add(
+          Positioned(
+            left: spacing * (i + 1) - chairSize / 2,
+            top: -10 - chairSize / 2,
+            child: _chair(),
+          ),
+        );
       }
+
+      // Alt sandalyeler
       for (var i = 0; i < bottomCount; i++) {
         final spacing = width / (bottomCount + 1);
-        chairs.add(Positioned(
-          left: spacing * (i + 1) - chairSize / 2,
-          top: 10 + height - (chairSize / 2),
-          child: _chair(),
-        ));
+
+        chairs.add(
+          Positioned(
+            left: spacing * (i + 1) - chairSize / 2,
+            top: 10 + height - chairSize / 2,
+            child: _chair(),
+          ),
+        );
       }
     }
+
     return chairs;
   }
 
-  Widget _chair() => Container(
-        width: 14,
-        height: 14,
-        decoration: BoxDecoration(
-          color: Colors.brown.shade300,
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.brown.shade600, width: 1),
-        ),
-      );
+  Widget _chair() {
+    return Container(
+      width: LayoutConstants.chairSize,
+      height: LayoutConstants.chairSize,
+      decoration: BoxDecoration(
+        color: Colors.brown.shade300,
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.brown.shade600, width: 1),
+      ),
+    );
+  }
 }
