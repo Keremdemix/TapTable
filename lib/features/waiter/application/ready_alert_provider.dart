@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../../tables/application/table_providers.dart' show tableLayoutProvider;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tap_table_staff/features/orders/data/order_repository.dart';
@@ -99,6 +100,7 @@ class ReadyAlertNotifier extends StateNotifier<Set<int>> {
       _previousReadyItemIds = readyByTable;
 
       _ref.read(tableAlertStateProvider.notifier).state = alertByTable;
+      _ref.invalidate(tableLayoutProvider);
 
       if (mounted) state = readyByTable.keys.toSet();
     } catch (_) {
