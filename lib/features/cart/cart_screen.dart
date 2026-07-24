@@ -5,6 +5,7 @@ import 'package:tap_table_customer/core/theme/restaurant_theme_provider.dart';
 import 'package:tap_table_customer/features/cart/cart_models.dart';
 import 'package:tap_table_customer/features/payment/payment_models.dart';
 import 'package:tap_table_customer/features/payment/payment_progress_badge.dart';
+import '../../core/widgets/themed_app_bar.dart';
 import '../../core/session/session_provider.dart';
 import '../orders/order_models.dart';
 import '../orders/order_provider.dart';
@@ -100,8 +101,9 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7F7F7),
-      appBar: AppBar(
-        title: const Text('Sepet & Siparişlerim'),
+      appBar: ThemedAppBar(
+        title: 'Sepet & Siparişlerim',
+        primary: primary,
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),
@@ -150,7 +152,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
           ? null
           : SafeArea(
               child: Container(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   boxShadow: [
@@ -168,7 +170,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                     // --- SEPET (henüz siparişe eklenmemiş yeni ürünler) ---
                     if (hasNewItems) ...[
                       Container(
-                        padding: const EdgeInsets.all(12),
+                        padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
                           color: accent.withOpacity(.08),
                           borderRadius: BorderRadius.circular(14),
@@ -184,14 +186,14 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                                   children: [
                                     Icon(
                                       Icons.add_shopping_cart,
-                                      size: 16,
+                                      size: 15,
                                       color: accent,
                                     ),
                                     const SizedBox(width: 6),
                                     Text(
                                       'SEPETİNİZ · Henüz Sipariş Verilmedi',
                                       style: TextStyle(
-                                        fontSize: 11,
+                                        fontSize: 10,
                                         fontWeight: FontWeight.w800,
                                         color: accent,
                                         letterSpacing: .2,
@@ -203,27 +205,28 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                                   '₺${newItemsTotal.toStringAsFixed(2)}',
                                   style: TextStyle(
                                     fontWeight: FontWeight.w800,
-                                    fontSize: 15,
+                                    fontSize: 14,
                                     color: accent,
                                   ),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 10),
+                            const SizedBox(height: 8),
                             SizedBox(
-                              height: 50,
+                              height: 42,
                               child: FilledButton.icon(
                                 style: FilledButton.styleFrom(
                                   backgroundColor: accent,
+                                  padding: EdgeInsets.zero,
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
+                                    borderRadius: BorderRadius.circular(11),
                                   ),
                                 ),
                                 onPressed: _placing ? null : _placeOrder,
                                 icon: _placing
                                     ? const SizedBox(
-                                        width: 18,
-                                        height: 18,
+                                        width: 16,
+                                        height: 16,
                                         child: CircularProgressIndicator(
                                           strokeWidth: 2,
                                           color: Colors.white,
@@ -231,7 +234,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                                       )
                                     : const Icon(
                                         Icons.playlist_add_check,
-                                        size: 18,
+                                        size: 16,
                                       ),
                                 label: Text(
                                   _placing
@@ -239,7 +242,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                                       : 'Bu Ürünleri Siparişe Ekle',
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w700,
-                                    fontSize: 14,
+                                    fontSize: 13,
                                   ),
                                 ),
                               ),
@@ -251,7 +254,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                                 'Bu bir ödeme değildir; ürünler mutfağa iletilir.',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
-                                  fontSize: 11,
+                                  fontSize: 10,
                                   color: Colors.grey.shade600,
                                 ),
                               ),
@@ -259,7 +262,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 12),
                     ],
 
                     // --- GENEL SİPARİŞ TOPLAMI ---
@@ -271,14 +274,14 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                             children: [
                               Icon(
                                 Icons.receipt_long,
-                                size: 18,
+                                size: 17,
                                 color: Colors.grey.shade600,
                               ),
                               const SizedBox(width: 8),
                               Text(
                                 'GENEL SİPARİŞ TOPLAMI',
                                 style: TextStyle(
-                                  fontSize: 12,
+                                  fontSize: 11,
                                   fontWeight: FontWeight.w700,
                                   color: Colors.grey.shade600,
                                   letterSpacing: .3,
@@ -290,7 +293,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                             '₺${grandTotal.toStringAsFixed(2)}',
                             style: const TextStyle(
                               fontWeight: FontWeight.w800,
-                              fontSize: 18,
+                              fontSize: 17,
                             ),
                           ),
                         ],
@@ -299,13 +302,13 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
                     // --- ÖDEME SEÇENEKLERİ ---
                     if (hasOrder) ...[
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 10),
                       if (hasNewItems)
                         Container(
                           width: double.infinity,
                           padding: const EdgeInsets.symmetric(
-                            vertical: 10,
-                            horizontal: 12,
+                            vertical: 8,
+                            horizontal: 10,
                           ),
                           decoration: BoxDecoration(
                             color: Colors.grey.shade100,
@@ -315,7 +318,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                             children: [
                               Icon(
                                 Icons.info_outline,
-                                size: 16,
+                                size: 15,
                                 color: Colors.grey.shade500,
                               ),
                               const SizedBox(width: 8),
@@ -323,7 +326,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                                 child: Text(
                                   'Ödeme yapmadan önce sepetinizdeki ürünleri siparişe ekleyin.',
                                   style: TextStyle(
-                                    fontSize: 12,
+                                    fontSize: 11,
                                     color: Colors.grey.shade600,
                                   ),
                                 ),
@@ -335,12 +338,12 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                         Text(
                           'Nasıl ödemek istersiniz?',
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: 11,
                             fontWeight: FontWeight.w700,
                             color: Colors.grey.shade600,
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 6),
                         _PaymentOptionsRow(primary: primary, accent: accent),
                       ],
                     ],
@@ -1152,16 +1155,17 @@ class _PaymentOptionsRow extends ConsumerWidget {
       children: [
         if (state != null) PaymentProgressBadge(state: state, accent: accent),
 
-        // Hepsini Öde — ana CTA, tam genişlik, dolgun
+        // Hepsini Öde — ana CTA, tam genişlik, artık daha kompakt
         SizedBox(
-          height: 56,
+          height: 46,
           child: FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: hasActivePlan ? Colors.grey.shade300 : accent,
               elevation: hasActivePlan ? 0 : 2,
               shadowColor: accent.withOpacity(.4),
+              padding: EdgeInsets.zero,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(13),
               ),
             ),
             onPressed: hasActivePlan
@@ -1172,7 +1176,7 @@ class _PaymentOptionsRow extends ConsumerWidget {
               children: [
                 Icon(
                   Icons.payments,
-                  size: 20,
+                  size: 17,
                   color: hasActivePlan ? Colors.grey.shade500 : Colors.white,
                 ),
                 const SizedBox(width: 8),
@@ -1180,7 +1184,7 @@ class _PaymentOptionsRow extends ConsumerWidget {
                   'Hepsini Öde',
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
-                    fontSize: 15,
+                    fontSize: 14,
                     color: hasActivePlan ? Colors.grey.shade500 : Colors.white,
                   ),
                 ),
@@ -1189,9 +1193,9 @@ class _PaymentOptionsRow extends ConsumerWidget {
           ),
         ),
 
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
 
-        // Alt satır — ikincil seçenekler, hafif kart görünümü
+        // Alt satır — ikincil seçenekler, hafif kart görünümü, daha kompakt
         Row(
           children: [
             Expanded(
@@ -1221,10 +1225,8 @@ class _PaymentOptionsRow extends ConsumerWidget {
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => SplitPaymentScreen(
-                      primary: primary,
-                      accent: accent,
-                    ),
+                    builder: (_) =>
+                        SplitPaymentScreen(primary: primary, accent: accent),
                   ),
                 ),
               ),
@@ -1255,15 +1257,15 @@ class _PaymentOptionCard extends StatelessWidget {
 
     return Material(
       color: disabled ? Colors.grey.shade100 : color.withOpacity(.08),
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(13),
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(13),
         onTap: onTap,
         child: Container(
-          height: 56,
+          height: 44,
           padding: const EdgeInsets.symmetric(horizontal: 8),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(13),
             border: Border.all(
               color: disabled ? Colors.grey.shade300 : color.withOpacity(.3),
             ),
@@ -1273,7 +1275,7 @@ class _PaymentOptionCard extends StatelessWidget {
             children: [
               Icon(
                 icon,
-                size: 18,
+                size: 16,
                 color: disabled ? Colors.grey.shade400 : color,
               ),
               const SizedBox(width: 6),
@@ -1282,7 +1284,7 @@ class _PaymentOptionCard extends StatelessWidget {
                   label,
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: 12,
                     fontWeight: FontWeight.w700,
                     color: disabled ? Colors.grey.shade400 : color,
                   ),

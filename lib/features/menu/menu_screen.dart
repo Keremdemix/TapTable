@@ -73,16 +73,16 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
 
           return SafeArea(
             child: Container(
-              margin: const EdgeInsets.all(12),
-              padding: const EdgeInsets.all(14),
+              margin: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.10),
-                    blurRadius: 20,
-                    offset: const Offset(0, 6),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
                   ),
                 ],
               ),
@@ -97,7 +97,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                       amount: previousTotal,
                       labelColor: Colors.grey.shade700,
                     ),
-                  if (hasPrevious && hasNew) const SizedBox(height: 8),
+                  if (hasPrevious && hasNew) const SizedBox(height: 6),
                   if (hasNew)
                     _NewItemsRow(
                       lines: cartLines,
@@ -105,7 +105,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                       primary: ref.watch(restaurantThemeProvider).primary,
                     ),
                   Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
                     child: Divider(height: 1, color: Colors.grey.shade200),
                   ),
                   if (paymentState != null)
@@ -122,7 +122,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                             Text(
                               'TOPLAM TUTAR',
                               style: TextStyle(
-                                fontSize: 11,
+                                fontSize: 10,
                                 fontWeight: FontWeight.w700,
                                 color: Colors.grey.shade600,
                                 letterSpacing: 0.3,
@@ -133,7 +133,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                               '₺${grandTotal.toStringAsFixed(2)}',
                               style: const TextStyle(
                                 fontWeight: FontWeight.w800,
-                                fontSize: 18,
+                                fontSize: 16,
                               ),
                             ),
                           ],
@@ -145,23 +145,23 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                               .watch(restaurantThemeProvider)
                               .primary,
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 14,
+                            horizontal: 16,
+                            vertical: 11,
                           ),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
+                            borderRadius: BorderRadius.circular(12),
                           ),
                         ),
                         onPressed: () => Navigator.push(
                           context,
                           MaterialPageRoute(builder: (_) => const CartScreen()),
                         ),
-                        icon: const Icon(Icons.shopping_bag, size: 18),
+                        icon: const Icon(Icons.shopping_bag, size: 16),
                         label: const Text(
                           'Sepete Git',
                           style: TextStyle(
                             fontWeight: FontWeight.w700,
-                            fontSize: 14,
+                            fontSize: 13,
                           ),
                         ),
                       ),
@@ -191,12 +191,11 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
               SliverAppBar(
                 pinned: true,
                 stretch: true,
-                expandedHeight: 190,
+                expandedHeight: 150,
                 backgroundColor: ref.watch(restaurantThemeProvider).primary,
                 elevation: 0,
-                automaticallyImplyLeading:
-                    false, // geri butonu da istemiyorsan kalsın
-                title: null, // başlığı kaldır
+                automaticallyImplyLeading: false,
+                title: null,
                 flexibleSpace: FlexibleSpaceBar(
                   title: null,
                   background: _RestaurantHeader(
@@ -223,21 +222,22 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                 SliverToBoxAdapter(
                   key: _categoryKeys[category.id],
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 22, 16, 10),
+                    padding: const EdgeInsets.fromLTRB(14, 16, 14, 8),
                     child: Row(
                       children: [
                         Container(
-                          width: 4,
-                          height: 18,
+                          width: 3,
+                          height: 15,
                           decoration: BoxDecoration(
                             color: ref.watch(restaurantThemeProvider).primary,
                             borderRadius: BorderRadius.circular(4),
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 7),
                         Text(
                           category.name,
-                          style: Theme.of(context).textTheme.titleLarge,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w700),
                         ),
                       ],
                     ),
@@ -252,7 +252,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                 ),
               ],
 
-              const SliverPadding(padding: EdgeInsets.only(bottom: 32)),
+              const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
             ],
           );
         },
@@ -282,7 +282,7 @@ class _RestaurantHeader extends StatelessWidget {
     final hasLogo = logoUrl != null && logoUrl!.isNotEmpty;
 
     return Container(
-      height: 250,
+      height: 150,
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -290,22 +290,22 @@ class _RestaurantHeader extends StatelessWidget {
           colors: [primary, Color.lerp(primary, accent, .6)!],
         ),
         borderRadius: const BorderRadius.only(
-          bottomLeft: Radius.circular(32),
-          bottomRight: Radius.circular(32),
+          bottomLeft: Radius.circular(24),
+          bottomRight: Radius.circular(24),
         ),
       ),
       child: Stack(
         children: [
           Positioned(
-            right: -40,
-            top: -30,
-            child: _decorativeCircle(150, Colors.white.withOpacity(.08)),
+            right: -30,
+            top: -20,
+            child: _decorativeCircle(100, Colors.white.withOpacity(.08)),
           ),
 
           Positioned(
-            left: -60,
-            bottom: -40,
-            child: _decorativeCircle(180, Colors.white.withOpacity(.05)),
+            left: -40,
+            bottom: -30,
+            child: _decorativeCircle(120, Colors.white.withOpacity(.05)),
           ),
 
           SafeArea(
@@ -314,17 +314,17 @@ class _RestaurantHeader extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Container(
-                    width: 92,
-                    height: 92,
-                    padding: const EdgeInsets.all(4),
+                    width: 60,
+                    height: 60,
+                    padding: const EdgeInsets.all(3),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withOpacity(.18),
-                          blurRadius: 18,
-                          offset: const Offset(0, 8),
+                          blurRadius: 12,
+                          offset: const Offset(0, 5),
                         ),
                       ],
                     ),
@@ -342,7 +342,7 @@ class _RestaurantHeader extends StatelessWidget {
                     ),
                   ),
 
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 10),
 
                   Text(
                     name,
@@ -351,29 +351,29 @@ class _RestaurantHeader extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 24,
+                      fontSize: 17,
                       fontWeight: FontWeight.w800,
                       letterSpacing: .3,
                     ),
                   ),
 
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
 
                   Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 6,
+                      horizontal: 10,
+                      vertical: 4,
                     ),
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(.18),
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(16),
                     ),
                     child: Text(
                       "Menüye Hoş Geldiniz",
                       style: TextStyle(
                         color: Colors.white.withOpacity(.95),
                         fontWeight: FontWeight.w600,
-                        fontSize: 13,
+                        fontSize: 11,
                       ),
                     ),
                   ),
@@ -404,7 +404,7 @@ class _RestaurantHeader extends StatelessWidget {
         style: TextStyle(
           color: primary,
           fontWeight: FontWeight.w800,
-          fontSize: 24,
+          fontSize: 18,
         ),
       ),
     );
@@ -433,17 +433,17 @@ class _BottomBarSummaryRow extends StatelessWidget {
     return Row(
       children: [
         Container(
-          padding: const EdgeInsets.all(4),
+          padding: const EdgeInsets.all(3),
           decoration: BoxDecoration(color: iconBg, shape: BoxShape.circle),
-          child: Icon(icon, size: 12, color: Colors.white),
+          child: Icon(icon, size: 10, color: Colors.white),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 6),
         Expanded(
           child: Text(
             label,
             style: TextStyle(
               fontWeight: FontWeight.w600,
-              fontSize: 13,
+              fontSize: 12,
               color: labelColor,
             ),
           ),
@@ -452,7 +452,7 @@ class _BottomBarSummaryRow extends StatelessWidget {
           '₺${amount.toStringAsFixed(2)}',
           style: TextStyle(
             fontWeight: FontWeight.w700,
-            fontSize: 13,
+            fontSize: 12,
             color: labelColor,
           ),
         ),
@@ -482,33 +482,33 @@ class _NewItemsRow extends StatelessWidget {
       children: [
         Center(
           child: Container(
-            padding: const EdgeInsets.all(4),
+            padding: const EdgeInsets.all(3),
             decoration: BoxDecoration(color: primary, shape: BoxShape.circle),
-            child: const Icon(Icons.add, size: 12, color: Colors.white),
+            child: const Icon(Icons.add, size: 10, color: Colors.white),
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 6),
         Expanded(
           child: SizedBox(
-            height: 100,
+            height: 76,
             child: Center(
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 physics: const BouncingScrollPhysics(),
                 itemCount: lines.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 6),
+                separatorBuilder: (_, __) => const SizedBox(width: 5),
                 itemBuilder: (context, index) =>
                     _NewItemThumb(line: lines[index]),
               ),
             ),
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 6),
         Text(
           '₺${total.toStringAsFixed(2)}',
           style: TextStyle(
             fontWeight: FontWeight.w700,
-            fontSize: 13,
+            fontSize: 12,
             color: primary,
           ),
         ),
@@ -528,7 +528,7 @@ class _NewItemThumb extends ConsumerWidget {
         line.item.imageUrl != null && line.item.imageUrl!.isNotEmpty;
 
     return SizedBox(
-      width: 72,
+      width: 58,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -536,61 +536,61 @@ class _NewItemThumb extends ConsumerWidget {
             clipBehavior: Clip.none,
             children: [
               ClipRRect(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(8),
                 child: hasImage
                     ? CachedNetworkImage(
                         imageUrl: line.item.imageUrl!,
-                        width: 52,
-                        height: 52,
+                        width: 40,
+                        height: 40,
                         fit: BoxFit.cover,
                         placeholder: (_, __) => Container(
-                          width: 52,
-                          height: 52,
+                          width: 40,
+                          height: 40,
                           color: Colors.grey.shade200,
                         ),
                         errorWidget: (_, __, ___) => Container(
-                          width: 52,
-                          height: 52,
+                          width: 40,
+                          height: 40,
                           color: Colors.grey.shade200,
                           child: const Icon(
                             Icons.fastfood,
-                            size: 22,
+                            size: 18,
                             color: Colors.grey,
                           ),
                         ),
                       )
                     : Container(
-                        width: 52,
-                        height: 52,
+                        width: 40,
+                        height: 40,
                         color: Colors.grey.shade200,
                         child: const Icon(
                           Icons.fastfood,
-                          size: 22,
+                          size: 18,
                           color: Colors.grey,
                         ),
                       ),
               ),
               if (line.quantity > 1)
                 Positioned(
-                  right: -5,
-                  top: -5,
+                  right: -4,
+                  top: -4,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 4,
+                      horizontal: 3,
                       vertical: 1,
                     ),
                     decoration: BoxDecoration(
                       color: ref.watch(restaurantThemeProvider).accent,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.white, width: 1.5),
+                      borderRadius: BorderRadius.circular(7),
+                      border: Border.all(color: Colors.white, width: 1.2),
                     ),
-                    constraints: const BoxConstraints(minWidth: 16),
+                    constraints: const BoxConstraints(minWidth: 14),
                     child: Text(
                       '${line.quantity}',
                       textAlign: TextAlign.center,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 9,
+                        fontSize: 8,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -598,54 +598,54 @@ class _NewItemThumb extends ConsumerWidget {
                 ),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 3),
           Text(
             line.item.name,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
+            style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 3),
           Container(
-            height: 22,
+            height: 19,
             decoration: BoxDecoration(
               color: ref.watch(restaurantThemeProvider).primary,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 InkWell(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(10),
                   onTap: () {
                     ref.read(cartProvider.notifier).decrement(line.item.id);
                   },
                   child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 6),
-                    child: Icon(Icons.remove, color: Colors.white, size: 12),
+                    padding: EdgeInsets.symmetric(horizontal: 5),
+                    child: Icon(Icons.remove, color: Colors.white, size: 10),
                   ),
                 ),
                 SizedBox(
-                  width: 18,
+                  width: 15,
                   child: Text(
                     '${line.quantity}',
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 10,
+                      fontSize: 9,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
                 InkWell(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(10),
                   onTap: () {
                     ref.read(cartProvider.notifier).add(line.item);
                   },
                   child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 6),
-                    child: Icon(Icons.add, color: Colors.white, size: 12),
+                    padding: EdgeInsets.symmetric(horizontal: 5),
+                    child: Icon(Icons.add, color: Colors.white, size: 10),
                   ),
                 ),
               ],
@@ -671,10 +671,10 @@ class _CategoryBarDelegate extends SliverPersistentHeaderDelegate {
   });
 
   @override
-  double get minExtent => 58;
+  double get minExtent => 46;
 
   @override
-  double get maxExtent => 58;
+  double get maxExtent => 46;
 
   @override
   Widget build(
@@ -687,22 +687,22 @@ class _CategoryBarDelegate extends SliverPersistentHeaderDelegate {
       alignment: Alignment.centerLeft,
       child: ListView(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
         children: categories.map((c) {
           final selected = c.id == activeCategoryId;
           return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 3),
             child: GestureDetector(
               onTap: () => onSelect(c.id),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 9,
+                  horizontal: 13,
+                  vertical: 7,
                 ),
                 decoration: BoxDecoration(
                   color: selected ? primary : Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(22),
+                  borderRadius: BorderRadius.circular(18),
                   border: Border.all(
                     color: selected ? primary : Colors.grey.shade200,
                   ),
@@ -712,7 +712,7 @@ class _CategoryBarDelegate extends SliverPersistentHeaderDelegate {
                   style: TextStyle(
                     color: selected ? Colors.white : Colors.black87,
                     fontWeight: FontWeight.w600,
-                    fontSize: 13,
+                    fontSize: 12,
                   ),
                 ),
               ),
@@ -742,38 +742,38 @@ class _MenuItemCard extends ConsumerWidget {
     );
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           if (item.imageUrl != null && item.imageUrl!.isNotEmpty)
             ClipRRect(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
               child: CachedNetworkImage(
                 imageUrl: item.imageUrl!,
-                width: 88,
-                height: 88,
+                width: 70,
+                height: 70,
                 fit: BoxFit.cover,
                 placeholder: (_, __) => Container(
-                  width: 88,
-                  height: 88,
+                  width: 70,
+                  height: 70,
                   color: Colors.grey.shade100,
                 ),
                 errorWidget: (_, __, ___) => Container(
-                  width: 88,
-                  height: 88,
+                  width: 70,
+                  height: 70,
                   color: Colors.grey.shade100,
                   child: const Icon(Icons.fastfood, color: Colors.grey),
                 ),
@@ -781,90 +781,101 @@ class _MenuItemCard extends ConsumerWidget {
             )
           else
             Container(
-              width: 88,
-              height: 88,
+              width: 70,
+              height: 70,
               decoration: BoxDecoration(
                 color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
               ),
               child: const Icon(Icons.fastfood, color: Colors.grey),
             ),
-          const SizedBox(width: 12),
+
+          const SizedBox(width: 10),
+
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   item.name,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  style: const TextStyle(
                     fontWeight: FontWeight.w700,
+                    fontSize: 14,
                   ),
                 ),
+
                 if (item.description != null &&
                     item.description!.isNotEmpty) ...[
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 3),
                   Text(
                     item.description!,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyMedium,
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                   ),
                 ],
-                const SizedBox(height: 10),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: ref
-                            .watch(restaurantThemeProvider)
-                            .accent
-                            .withOpacity(0.10),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        '₺${item.price.toStringAsFixed(2)}',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w800,
-                          color: ref.watch(restaurantThemeProvider).accent,
-                          fontSize: 14,
-                        ),
-                      ),
+
+                const SizedBox(height: 8),
+
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: ref
+                        .watch(restaurantThemeProvider)
+                        .accent
+                        .withOpacity(0.10),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '₺${item.price.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      color: ref.watch(restaurantThemeProvider).accent,
+                      fontSize: 13,
                     ),
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 200),
-                      transitionBuilder: (child, anim) =>
-                          ScaleTransition(scale: anim, child: child),
-                      child: quantity == 0
-                          ? FilledButton.icon(
-                              key: const ValueKey('add'),
-                              style: FilledButton.styleFrom(
-                                backgroundColor: ref
-                                    .watch(restaurantThemeProvider)
-                                    .primary,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                              ),
-                              onPressed: () =>
-                                  ref.read(cartProvider.notifier).add(item),
-                              icon: const Icon(Icons.add, size: 16),
-                              label: const Text('Ekle'),
-                            )
-                          : _QuantityStepper(
-                              key: const ValueKey('stepper'),
-                              item: item,
-                              quantity: quantity,
-                            ),
-                    ),
-                  ],
+                  ),
                 ),
               ],
             ),
+          ),
+
+          const SizedBox(width: 10),
+
+          // Sağdaki buton ürün kartının tamamına göre dikey ortalanır
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            transitionBuilder: (child, anim) =>
+                ScaleTransition(scale: anim, child: child),
+            child: quantity == 0
+                ? FilledButton.icon(
+                    key: const ValueKey('add'),
+                    style: FilledButton.styleFrom(
+                      fixedSize: const Size(90, 36),
+                      backgroundColor: ref
+                          .watch(restaurantThemeProvider)
+                          .primary,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    onPressed: () => ref.read(cartProvider.notifier).add(item),
+                    icon: const Icon(Icons.add, size: 14),
+                    label: const Text('Ekle', style: TextStyle(fontSize: 12)),
+                  )
+                : _QuantityStepper(
+                    key: const ValueKey('stepper'),
+                    item: item,
+                    quantity: quantity,
+                  ),
           ),
         ],
       ),
@@ -888,7 +899,7 @@ class _QuantityStepper extends ConsumerWidget {
     return Container(
       decoration: BoxDecoration(
         color: accent,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -898,14 +909,14 @@ class _QuantityStepper extends ConsumerWidget {
             onTap: () => ref.read(cartProvider.notifier).decrement(item.id),
           ),
           SizedBox(
-            width: 22,
+            width: 20,
             child: Text(
               '$quantity',
               textAlign: TextAlign.center,
               style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w700,
-                fontSize: 14,
+                fontSize: 13,
               ),
             ),
           ),
@@ -928,10 +939,10 @@ class _StepperButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(8),
       child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Icon(icon, size: 16, color: Colors.white),
+        padding: const EdgeInsets.all(6),
+        child: Icon(icon, size: 14, color: Colors.white),
       ),
     );
   }
